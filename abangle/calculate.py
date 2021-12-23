@@ -274,39 +274,21 @@ class PDB:
                     self.Fvs.append(
                         Fv(self.Chains[comb[0]], self.Chains[comb[1]], self.name)
                     )
-
-    def CheckReturned(self):
-        # Check that Fvs have been located and if not tell the user what may have gone wrong.
         if not self.Fvs:
             if self.ABchains:
-                sys.stderr.write(
-                    """\tWarning: 
-		~ No Fv regions found in %s.
-		~ Unpaired antibody chains were found: %s
-		~ These are either of all the same type (VH or VL) or do not meet the distance constraint.
-		~ Please use the scfv option for single chain fvs.\n"""
-                    % (
-                        self.filepath,
-                        ", ".join(
-                            [
-                                c[1] + " (V%s)" % self.Chains[c].type
-                                for c in self.ABchains
-                            ]
-                        ),
-                    )
+                unpaired_chains = self.filepath, ", ".join([f'{c[1]} (V{self.Chains[c].type})' for c in self.ABchains])
+                
+                raise Exception(
+                    f"""Could not locate Fvs in {self.filepath}
+                    Unpaired antibody chains were found: {unpaired_chains}
+                    These are either of all the same type (VH or VL) or do not meet the distance constraint.
+                    Please use the scfv option for single chain fvs.\n"""
                 )
             else:
-                sys.stderr.write(
-                    "Warning:\n\t\t~ No antibody chains found in %s.\n" % self.filepath
+                raise Exception(
+                    f"""No antibody chains found in {self.filepath}.\n
+                    check that heavy and light chains have chain identifiers H and L respectively.\n"""
                 )
-                if self.args.usernumbered:
-                    sys.stderr.write(
-                        "\t\t~ Please check that heavy and light chains have chain identifiers H and L respectively.\n"
-                    )
-                else:
-                    sys.stderr.write(
-                        "\t\t~ Please check that ABnum can number the sequence of your VH or VL domain.\n"
-                    )
 
 class Chain:
     """A class to describe a chain in a pdb file.
