@@ -146,6 +146,8 @@ class PDB:
     Should handle any structure with VH and VL regions in different chains. Use the scfv option to tell abnum to look for VH and VL regions on the same chain.
     Multiple models in the same file will also be handled. Note that abangle was developed using X-ray xtal structures only"""
 
+    distance_cutoff = 20 # angstrom threshold for pairing heavy and light chains
+
     def __init__(self, name, filepath, args, verbose = False, usernumbered = True):
         self.name = name
         self.filepath = filepath
