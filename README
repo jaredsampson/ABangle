@@ -1,0 +1,167 @@
+ABangle. A program to calculate and analyse the orientation between the VH and VL domains in 
+Antibodies. 
+
+J. Dunbar, A. Fuchs, J. Shi, CM. Deane, ABangle: Characterising the VH-VL orientation in antibodies, PEDS, 2013, In Press
+
+
+Domain orientation is defined using six absolute measures: Five angles and a distance. 
+Geometry.png shows the geometrical system used to define the orientations.
+
+HL - torsion angle between L1 and H1 vectors.
+LC1   - bend angle between L1 and C.
+LC2   - bend angle between L2 and C
+HC1   - bend angle between H1 and C
+HC2   - bend angle between H2 and C
+dc    - the length of the C vector.
+
+Functionality:
+
+~ Calculating orientation angles for a new structure:
+
+    Required Arguments:
+    -i                  Input PDB files to be analysed (multiple files allowed). Heavy and light
+                        chains must have different chain identifiers. Otherwise, all Fvs within the 
+                        file will be automatically identified.
+
+
+    Optional Arguments:
+    -store                      Store the angles, sequence and pdb structure of the Fvs in input PDB file.
+                                A local data repository will be created in a path of the user's choosing.
+    -change_numbering_path      Change the path to local antibody numbering program. Currently, only
+                                compatible with a local copy of abysis. Follow on screen instructions to
+                                make online numbering default instead.
+    -online                     Use the ABnum Public Server to chothia number the structures in 'i' argument.
+    -usernumbered               Use the chothia numbering in the PDB file. In this case, file must contain a 
+                                single Fv region with heavy and light chain identifiers being H and L 
+                                repectively. The residue identifiers will be taken as Chothia numbered 
+                                positions
+    -change_data_path           Change the path to the local user data repository.
+    -clear                      Clear a structure from the user data repository. Use 'all' to clear all data.
+    -scfv                       Chains that are single chain fv structures. ABangle will try to find VH and
+                                VL regions within the chain.
+
+
+    On the first use of the -i option, the user will be asked whether they wish to provide a path to
+    a local numbering program. Currently, only abysis is supported for local numbering (path to the 
+    script kabnum_wrapper.pl is required). If this program is unavailable to the user, the public
+    abnum webserver can be used. To view or change the path to numbering program, use change_numbering_path 
+    option.
+    The user will also be asked whether they wish to store data. If yes, a new folder named 
+    ABangleData will be created in a path of a user's choice. Use change_data_path to change this 
+    repository. The data stored is the orientation angles, the sequence of the fvs and a chothia
+    numbered pdb file of each Fv region that has been identified by the program.
+
+    Examples:
+     1. Find all the Fv regions in a PDB file (or files) and calculate the orientation angles between
+        VH and VL domains:
+            ABangle -i AB1.pdb
+              or
+            ABangle -i AB1.pdb AB2.pdb AB3.pdb
+
+     2. Do calculation for all Fvs in all of PDBs in .dat file:                
+            ABangle -i ListOfFiles.dat
+              where ListOfFiles.dat contains:
+                path/to/file/AB1.pdb                
+                path/to/file/AB2.pdb
+                path/to/file/AB3.pdb
+                .       .       .
+                .       .       .
+              
+
+~ Select sets of structures to analyse.
+
+    Optional Arguments:
+    -r                  Specify residue positions. (e.g. H50 or L87). With no other arguments, the
+                        combination of amino acids at those positions will be reported. The number
+                        of structures (in non-redundant set) with each combination is reported, as 
+                        well as the number expected from the frequencies of amino acids at the 
+                        individual positions.
+    -wa                 Select structures With Amino acids at postions determined in -r argument.  
+    -f                  Specify factors to select structures with. Choices are: HL, HC1, LC1, HC2,
+                        LC2, dc, Method, Res, Rfac, Bstate, AGtype, Hgroup, Lgroup, 
+                        Ltype, Species, L1length, H3length.
+    -wp                 Select structures With Parameters of the factors determined in -f argument.
+                        See examples.
+    -s                  Pick individual structures by name. Use 'mine' to recall all user structures.
+                        Use 'all' to pick all pre-calculated structures.
+    -target             Select all pre-calculated structures which have a similar domain orientation 
+                        of a particular structure. This automatically puts thresholds on each of the
+                        angular measures and searches for structures which meet the threshold of each
+                        measure. Thresholds are taken as the angle we would expect sequence-identical
+                        unbound structures to be within.
+
+    Examples:
+     1. Request the combinations of amino acids at postions H40 and L22:
+            ABangle -r H40 L22
+
+     2. Request structures with arginine at H40 and serine at L22:
+            ABangle -r H40 L22 -wa R S
+
+     3. Request two sets of structures. One with arginine at H40 and serine at L22. The other with
+        alanine at H40 and threonine at L22 :
+            ABangle -r H40 L22, H40 L22 -wa R S, A T
+              or
+            ABangle -r H40 L22 -wa R S, A T
+        Use commas to separate sets of stuctures.
+
+     4. Request one set of structures. Those with arginine OR alanine at H40 and serine OR threonine
+        at L22:
+            ABangle -r H40 L22 -wa R+A S+T
+        Use '+' to signify 'or' logic.
+
+     5. Request four sets of structures. Mouse Kappa structures, Mouse Lambda structures, Human Kappa
+        structures and Human Lambda structures:
+            ABangle -f Species Ltype -wp Mouse K, Mouse L, Human K, Human L
+
+     6. Request 3 sets of structures. One with a HL angle within 2 degrees of -60 degrees; one 
+        with HL angle greater than -50 degrees; one less than -65 degrees.
+            ABangle -f HL -wp 2:-60, gt:-50, lt:-65
+        For numerical factors use <option>:<x> , where <option> can be 'gt' (greater than), 'lt'
+        (less than) or a number for 'within'. <x> is always a number.
+
+     7. Request two sets of structures. One with Mouse Lambda structures with phenylalanine at L87 
+        and LC1 within 2 degrees of 115 degrees; one with Unbound structures with an H3 loop length
+        longer than 10 and with tryptophan at residue H50:
+            ABangle -r L87, H50 -wa F, W -f Species Ltype LC1, Bstate H3length -wp Mouse L 2:115,
+            Unbound gt:10
+        Use commas to separate sets. Use the same order to specify your sets in -r -wa -f -wp args.
+
+     8. Request sets of individual structures. One containing 12E8_HL and 1AY1_HL, one containing all
+        of the user's structures (if stored, else all structures), one containing all fvs, and one
+        containing all structures:
+        from pdb 12E8:
+            ABangle -s 12E8_HL 1AY1_HL, mine, 12E8, all
+        Particular Fvs are labelled with PDBfile_HeavyChainLightChain. 
+
+    9.  Find all the structures which have the same orientation as a target structure:
+            ABangle -target 12E8_PM 
+
+
+~ Visualisation of data.
+
+    Optional Arguments:
+    -showinfo           Show the information for each of the structures defined in the sets.
+    -plot               Plot the distributions of the orientation measues. Use 'all' to plot all or
+                        one of 'HL', 'HC1', 'HC2', 'LC1', 'LC2' or 'dc' to show one of the 
+                        parameters.
+    -lty                The type of line to draw for the sets. Choose from density plot 'd' or a
+                        vertical line for each structrue in the set 'l'. Default is to use 'd' unless
+                        the set size is too small.
+    -bg                 Provide an alternative background distribution. Must be a .dat file in the 
+                        format of the file found in abangle/data/Angles.dat.
+    -png                Output plots as png image. Provide a filename with '.png' extension.
+    -pymol              Show in PyMOL the sets of structures. Each are aligned (TMalign)to the light
+                        chain consensus structure by default and are coloured according to set.
+    -nalign             Define the maximum number of structures to show from each set.
+    -useH               Align to the H chain consensus structure instead of the L chain.
+    -showaxes           Show the coordinate system registered onto each of the structures in PyMOL.
+    -msa                Show the msa of the structures selected.
+    -mr                 Show the msa of the structures selected over certain residues.
+
+    Examples:
+     1. Plot angle distributions of sets: Mouse Kappa structures, Mouse Lambda structures, Human 
+        Kappa structures and Human Lambda structures:
+            ABangle -f Species Ltype -wp Mouse K, Mouse L, Human K, Human L -plot all
+        show them in PyMOL:
+            ABangle -f Species Ltype -wp Mouse K, Mouse L, Human K, Human L -pymol
+

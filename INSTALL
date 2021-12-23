@@ -1,0 +1,25 @@
+ABangle installation.
+
+ABangle has been developed to run from command line of a linux os 
+
+Dependencies:
+	Python 2.7 or higher
+	Required to calculate orientation angles of new structures:
+		TMalign (http://zhanglab.ccmb.med.umich.edu/TM-align/) 
+		numpy python module (http://numpy.scipy.org/) 
+
+	Required for visualisation:
+		R and Rscript (http://www.r-project.org/)
+		PyMOL  (http://www.pymol.org/) 
+		display (Included in open source ImageMagick package: http://www.imagemagick.org/ ) 
+
+To install:
+	~ Place abangle folder in your PYTHONPATH
+	~ Place ABangle script in your PATH
+
+To run on command line:
+	ABangle
+
+For more infomation see README
+
+Any issues please contact james.dunbar@dtc.ox.ac.uk	
