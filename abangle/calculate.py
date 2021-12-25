@@ -19,9 +19,6 @@ AUTHOR
 	Prof C.Deane - Oxford protein informatics group.
 	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)\n
 """
-##################
-# Python modules #
-##################
 import subprocess
 import numpy
 import math
@@ -35,21 +32,11 @@ import re
 import pathlib
 import collections
 from Bio.PDB.PDBParser import PDBParser
-
-
-
-
-###################
-# abangle modules #
-###################
 from abangle import dataIO
 
-####################
-# Global variables #
-####################
+path = pathlib.Path(__file__).parent
+data_path = path.parent/'data'
 
-path = os.path.split(__file__)[0]
-data_path = str(pathlib.Path(__file__).parents[1]/'data')
 try:
     savedpath = open(os.path.join(path, "config/userdatapath.txt")).readline().strip()
     if savedpath and not os.path.exists(savedpath):
@@ -77,14 +64,15 @@ coresetH = [
 ]
 
 # Read in the plane vectors precalculated on the consensus structure
-Lpos = map(
-    lambda x: map(float, x),
-    map(str.split, open(os.path.join(data_path, "pcL.txt")).readlines()),
-)
-Hpos = map(
-    lambda x: map(float, x),
-    map(str.split, open(os.path.join(data_path, "pcH.txt")).readlines()),
-)
+Lpos = [
+    [float(num) for num in line.split()] 
+    for line in (data_path/'pcL.txt').open()
+]
+
+Hpos = [
+    [float(num) for num in line.split()] 
+    for line in (data_path/'pcH.txt').open()
+]
 
 # Amino acid translation
 AA = [
@@ -138,9 +126,6 @@ Sequences, Residues = dataIO.load(
     os.path.join(data_path, "Sequences.dat"), header=True, rownames=0, conv=False
 )
 
-##########################
-# Structure file classes #
-##########################
 class PDB:
     """A class to describe PDB files. Parses the file and locates Fv regions.
     Should handle any structure with VH and VL regions in different chains. Use the scfv option to tell abnum to look for VH and VL regions on the same chain.
@@ -155,29 +140,32 @@ class PDB:
         self.parser = PDBParser(PERMISSIVE=1)
         self.verbose = verbose
         self.usernumbered = usernumbered
-        # self.parse_pdb()  # Get Chain objects
-        # self.pair_chains()  # Pair the VH and VL chains using distance constraint
-        # self.CheckReturned()  # Check what was found and produce warning messages if required
+        self.parse_pdb()  # Get Chain objects
+        self.pair_chains()  # Pair the VH and VL chains using distance constraint
 
     def read_pdb(self):
         pdb_path = pathlib.Path(self.filepath)
+        assert pdb_path.exists(), 'Could not find file, check the path is correct'
+        return pdb_path.read_text().splitlines()
         
-        try:
-            return pdb_path.read_text().splitlines()
-        except IOError:
-            raise Exception(f"File {self.filepath} not found")
-
     def parse_pdb(self):
-        #pdb_fo = io.StringIO(self.read_pdb())
-        pdb_lines = self.read_pdb()
+        # pdb_fo = io.StringIO(self.read_pdb())
+        # pdb_lines = self.read_pdb()
+        with open(self.filepath) as f:
+            pdb_lines = f.readlines()
         
-        # Find the models and the chains of the PDB file
-        #model = self.parser.get_structure(self.name, pdb_fo)[0]
-        chainlines = collections.defaultdict(list)
+        model = ''
+        chainlines = {}
         for line in pdb_lines:
-            if line.startswith('ATOM'):
-                chain = '', re.split(r'\s+', line)[4] # '' is standin for model id which will be 0 in most cases 
-                chainlines[chain].append(line)
+            if line.startswith("MODEL"):
+				# If we find a model id then use it for the following lines
+                model = line.split()[1]
+            elif line.startswith("ATOM"): # or line.startswith("HETATM"):
+                c = line[21]
+                try:
+                    chainlines[ (model, c ) ].append( line )
+                except:
+                    chainlines[ (model, c ) ] = [ line ]
 
         # Create Chain objects for each chain in the file
         if self.verbose:
@@ -260,6 +248,7 @@ class PDB:
                 except KeyError:
                     Models[chain[0]] = [chain]
 
+        # TODO implement function to compute distance between two chains
         self.Fvs = []
         for model in Models:
             for comb in itertools.combinations(Models[model], 2):
@@ -565,12 +554,12 @@ def create_coreset(fname):
         fin = open(fname, "r").readlines()
         for line in fin:
             l = line.split()
-            if l[0] != "ATOM":
+            if not "ATOM" in line:
                 continue
             elif l[4] == "L" and l[5] in coresetL:
                 Ltmp.write(line)
             elif l[4] == "H" and l[5] in coresetH:
-                Htmp.write(line)
+                Htmp.write(line)  
         Htmp.close()
         Ltmp.close()
     except Exception as exe:
@@ -578,6 +567,10 @@ def create_coreset(fname):
         os.remove(Lf)
         raise Exception(str(exe) + "\n")
 
+    with open(Hf) as f:
+        with open('Hf.pdb', 'w') as w:
+            w.write(f.read())
+    
     return Hf, Lf
 
 
@@ -587,11 +580,11 @@ def mapvectors(fname, PAPS_def=False):
     their torsion angle (makes HL should be the same as their packing angle as defined in authors' paper)"""
     # Get transformation matrices by aligning the core of the domains
     Hf, Lf = create_coreset(fname)
-
+    
     uL = align(os.path.join(data_path, "consensus_L.pdb"), Lf)
     uH = align(os.path.join(data_path, "consensus_H.pdb"), Hf)
-    os.remove(Hf)
-    os.remove(Lf)
+    # os.remove(Hf)
+    # os.remove(Lf)
 
     if PAPS_def:
         # The centroids of interface residues.
@@ -616,8 +609,8 @@ def mapvectors(fname, PAPS_def=False):
     H2 = [cH[i] + Hpos[1][i] for i in range(3)]
 
     # Do the transfomation onto the
-    Lpoints = map(lambda x: transform(x, uL), (cL, L1, L2))
-    Hpoints = map(lambda x: transform(x, uH), (cH, H1, H2))
+    Lpoints = list(map(lambda x: transform(x, uL), (cL, L1, L2)))
+    Hpoints = list(map(lambda x: transform(x, uH), (cH, H1, H2)))
 
     return Lpoints, Hpoints
 
@@ -645,7 +638,8 @@ def align(file1, file2):
         )
 
     # Parse the output of TMalign. Some versions don't output the matrix. -m option is needed. Does not affect versions which don't need it.
-    result = TMresult[0].split("\n")
+    
+    result = TMresult[0].decode('utf-8').split("\n")
     attempt = 0
     while 1:
         try:
@@ -654,9 +648,9 @@ def align(file1, file2):
                 if result[i].upper().startswith(" -------- ROTATION MATRIX"):
                     # Grab transformation matrix
                     u = []
-                    u.append(map(float, result[i + 2].split()[1:]))
-                    u.append(map(float, result[i + 3].split()[1:]))
-                    u.append(map(float, result[i + 4].split()[1:]))
+                    u.append(list(map(float, result[i + 2].split()[1:])))
+                    u.append(list(map(float, result[i + 3].split()[1:])))
+                    u.append(list(map(float, result[i + 4].split()[1:])))
                     break
                 else:
                     i += 1
@@ -686,8 +680,7 @@ def align(file1, file2):
 def transform(coords, u):
     """Transforms coords by a matrix u. u is found using tmalign"""
     # Ensure coordinates are of type float
-    coords = map(float, coords)
-
+    coords = list(map(float, coords))
     # Do transformation
     X = u[0][0] + u[0][1] * coords[0] + u[0][2] * coords[1] + u[0][3] * coords[2]
     Y = u[1][0] + u[1][1] * coords[0] + u[1][2] * coords[1] + u[1][3] * coords[2]
@@ -696,20 +689,19 @@ def transform(coords, u):
     # Return transformed coordinates
     return [X, Y, Z]
 
-
 def normalise(vec):
-    mag = (sum(map(lambda x: x ** 2, vec))) ** 0.5
-    return map(lambda x: x / mag, vec)
+    mag = (sum(list(map(lambda x: x ** 2, vec)))) ** 0.5
+    return list(map(lambda x: x / mag, vec))
 
-
-def angles(fname, args):
+def angles(fname):
     """Calculate the orientation measures for the structure in fname"""
     # Map the vectors on the Heavy and Light domains of the structure
+    
     Lpoints, Hpoints = mapvectors(fname)
 
     # Create vectors with which to calculate angles between.
     C = normalise([Hpoints[0][i] - Lpoints[0][i] for i in range(3)])
-    Cminus = map(lambda x: -1 * x, C)
+    Cminus = list(map(lambda x: -1 * x, C))
     L1 = normalise([Lpoints[1][i] - Lpoints[0][i] for i in range(3)])
     L2 = normalise([Lpoints[2][i] - Lpoints[0][i] for i in range(3)])
     H1 = normalise([Hpoints[1][i] - Hpoints[0][i] for i in range(3)])
@@ -720,6 +712,7 @@ def angles(fname, args):
     )
 
     # Projection of the L1 and H1 vectors onto the plane perpendicular to the centroid vector.
+    print(L1, C)
     n_x = numpy.cross(L1, C)
     n_y = numpy.cross(C, n_x)
 
@@ -804,7 +797,7 @@ def get_fvs(FileNames, Mode, args):
     FvSequences = {}
 
     for File in FileNames:
-
+        
         Fvs = PDB(File, FileNames[File], args).Fvs
         for Fv in Fvs:
             if args.store:
@@ -1219,12 +1212,13 @@ def GetAngles(args):
             NewFileNames, StoreMode = CheckNamespace(args)
             NewFvRegions, StoreMode, FvSequences = get_fvs(NewFileNames, StoreMode, args)
         else:
-            NewFileNames = dict(
-                zip(
-                    map(lambda x: os.path.splitext(os.path.split(x)[1])[0], args.i),
-                    args.i,
-                )
-            )
+            # NewFileNames = dict(
+            #     zip(
+            #         map(lambda x: os.path.splitext(os.path.split(x)[1])[0], args.i),
+            #         args.i,
+            #     )
+            # )
+            NewFileNames = {args.name: args.i}
             NewFvRegions, StoreMode, FvSequences = get_fvs(
                 NewFileNames, {}, args
             )  # StoreMode will come back empty
@@ -1236,7 +1230,7 @@ def GetAngles(args):
         for structure in NewFvRegions:
 
             # Calculate the angles and extract the sequence of the antibody.
-            NewAngles[structure] = angles(NewFvRegions[structure], args)
+            NewAngles[structure] = angles(NewFvRegions[structure])
 
             if args.store:
                 AppendAngleStore(

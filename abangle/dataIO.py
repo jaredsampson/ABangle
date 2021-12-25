@@ -163,11 +163,11 @@ def print_table(table, out):
     for i in range(len(table[0])):
         col_paddings.append(get_max_width(table, i))
     for row in table:
-        print >> out, row[0].ljust(col_paddings[0] + 1),
+        print(row[0].ljust(col_paddings[0] + 1), file=out)
         for i in range(1, len(row)):
             col = format_data(row[i]).rjust(col_paddings[i] + 1)
-            print >> out, col,
-        print >> out
+            print(col, file=out)
+        print(out)
 
 
 def format_data(dat):

@@ -1,5 +1,5 @@
 from typing import List
-from abangle.calculate import PDB
+from abangle.calculate import *
 import argparse
 import pytest
 from pathlib import Path
@@ -13,6 +13,12 @@ class PDBargs:
     scfv: List = None
     q: bool = True
     usernumbered: bool = True
+
+@dataclass
+class GetAnglesargs:
+    i: str 
+    store: bool = False
+    q: bool = True
 
 @pytest.fixture
 def pdb():
@@ -35,6 +41,11 @@ def test_pair_chains(pdb):
     assert fvs.c1.FVATOMS[0] == 'ATOM      1  N   VAL H   2      28.598  -0.497   9.629  1.00 31.59           N  '
     assert fvs.c2.FVATOMS[0] == 'ATOM   1804  N   ASP L   1      24.272  29.366   0.981  1.00 46.85           N  '
     assert all([seq['H2'] == 'V', seq['H60'] == 'A', seq['L93'] == 'D', seq['H86'] =='D', seq['H100'] == 'F'])
+
+def test_GetAngles():
+    path = data_path/'example_pdbs'/'4KQ3_abnum.pdb'
+    args = GetAnglesargs(path)
+    return GetAngles(args)
 
 
 
