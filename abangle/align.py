@@ -273,7 +273,7 @@ def buildaxes(name, vectorlength=10, color="yellow"):
 
     os.remove(_tmp_fname)
 
-
+# FIXME normalize defined in both calculate and align?? is this one accessed? if not can we delete
 def normalise(a, length=1):
     mag = (sum(map(lambda x: x ** 2, a))) ** 0.5
     return map(lambda x: length * x / mag, a)
