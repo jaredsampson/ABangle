@@ -38,6 +38,7 @@ import itertools
 ##########################
 
 from abangle import align, dataIO
+from functools import reduce
 
 ####################
 # Global variables #
@@ -57,7 +58,7 @@ All_Sequences, Residues = dataIO.load(
 All_Names = (
     {}
 )  # parse all the names with the same root name ( e.g. 12E8_HL and 12E8_PM have 12E8 as the root name )
-for name in All_Angles.keys():
+for name in list(All_Angles.keys()):
     try:
         All_Names[name.split("_")[0]].append(name)
     except KeyError:
@@ -89,7 +90,7 @@ try:
     Users_Names = (
         {}
     )  # parse the names of the structures the user has saved so that they can use the root name to recall them.
-    for name in [n.split("_") for n in User_Angles.keys()]:
+    for name in [n.split("_") for n in list(User_Angles.keys())]:
         if len(name) == 2:
             try:
                 Users_Names[name[0]].append("_".join(name))
@@ -239,14 +240,14 @@ class StructureSet:
             if self.Classwp[0]:
                 names = [
                     name
-                    for name in Angles.keys()
+                    for name in list(Angles.keys())
                     if tuple(
                         Angles[name][f] for f in self.f if self.factortype[f] == "c"
                     )
                     in self.Classwp
                 ]
             else:
-                names = Angles.keys()
+                names = list(Angles.keys())
 
             # Filter these with those which meet the a numerical parameters.
             self.Numf = [f for f in self.f if self.factortype[f] == "n"]
@@ -271,13 +272,13 @@ class StructureSet:
                         # Only take structures which satisfy all the conditions.
                         if reduce(
                             mul,
-                            (funcs[f](Angles[name][f], X[f], dx[f]) for f in X.keys()),
+                            (funcs[f](Angles[name][f], X[f], dx[f]) for f in list(X.keys())),
                         ):
                             self.structures.append(name)
             else:
                 self.structures = names
         else:
-            self.structures = Angles.keys()
+            self.structures = list(Angles.keys())
 
     def SearchResidues(self):
         """Search the structures to find those with a certain combination of amino acids at given residue positions"""
@@ -492,13 +493,13 @@ def InterpretNumeric(L):
 
 def ParseW(rawarg):
     """Parse the -wa or -wp arguments (with arguments) to give nested lists of with arguments"""
-    return map(lambda x: x.split(), rawarg.split(","))
+    return [x.split() for x in rawarg.split(",")]
 
 
 def Parselogic(l):
     """Parse a sequence of query parameters: + => 'or'.
     If you put ~ infront then parse to give 'not'"""
-    w = map(lambda x: x.split("+"), l)
+    w = [x.split("+") for x in l]
     wparsed = []
     for r in w:
         notFlag = [x.startswith("not") for x in r]
@@ -542,9 +543,9 @@ def target(args):
     if set(args.f) & set(["HL", "HC1", "LC1", "HC2", "LC2"]):
         raise Exception("Angular parameters may not be used with -target option\n")
 
-    if User_Angles.has_key(args.target):
+    if args.target in User_Angles:
         TargetAngles = User_Angles[args.target]
-    elif All_Angles.has_key(args.target):
+    elif args.target in All_Angles:
         TargetAngles = All_Angles[args.target]
     else:
         raise Exception("Structure %s not known\n" % args.target)
@@ -603,7 +604,7 @@ def GetFactorCombinations(Setr, Setwa, Setf, Setwp, args):
                 [All_Sequences[struc][r] for r in ResNames]
                 + [All_Angles[struc][f] for f in FacNames]
             )
-        except KeyError, e:
+        except KeyError as e:
             if str(e).strip("'") != struc:
                 raise Exception("Unrecognised factor %s" % e)
 
@@ -615,7 +616,7 @@ def GetFactorCombinations(Setr, Setwa, Setf, Setwp, args):
                 )
                 All_Angles[struc] = User_Angles[struc]
                 All_Sequences[struc] = User_Sequences[struc]
-            except KeyError, e:
+            except KeyError as e:
                 raise Exception("Structure %s not known" % e)
 
         try:
@@ -761,11 +762,11 @@ def UserSets(Usets):
     Sets = []
     for s in ParseW(" ".join(Usets)):
         if s[0] == "all":
-            s = Angles.keys()
+            s = list(Angles.keys())
             label = "pre-calculated structures"
         elif s[0] == "mine":
             if User_Angles:
-                s = User_Angles.keys()
+                s = list(User_Angles.keys())
                 label = "user's structures"
             else:
                 sys.stderr.write("Warning: No stored user structures found\n")
@@ -773,7 +774,7 @@ def UserSets(Usets):
         elif s[0].endswith(".dat"):
             # Expect a file  with a list of structure names. One per line.
             label = "structures defined in %s" % s[0]
-            s = map(str.strip, open(s[0]).readlines())
+            s = list(map(str.strip, open(s[0]).readlines()))
         else:
             label = ""
         Sets.append(StructureSet([], [], [], [], s, label))
@@ -842,7 +843,7 @@ def PlotAngles(StructureSets, args, NewAngles=[], show=True):
 
     for ang in Data["anglenames"]:
         Data[ang + "Full"] = []
-        for code in Angles.keys():
+        for code in list(Angles.keys()):
             Data[ang + "Full"].append("%.2f" % Angles[code][ang])
 
     ###############################
@@ -919,13 +920,13 @@ def PlotAngles(StructureSets, args, NewAngles=[], show=True):
 
         Data.update(
             dict(
-                zip(
+                list(zip(
                     [a + str(n) for a in Data["anglenames"]],
                     [
-                        map(lambda t: "%.2f" % t, StructureSets[i].Angles[a])
+                        ["%.2f" % t for t in StructureSets[i].Angles[a]]
                         for a in Data["anglenames"]
                     ],
-                )
+                ))
             )
         )
         Data["Label" + str(n)] = (
@@ -938,13 +939,13 @@ def PlotAngles(StructureSets, args, NewAngles=[], show=True):
     for i in NewAngles:
         Data.update(
             dict(
-                zip(
+                list(zip(
                     [a + str(n) for a in Data["anglenames"]],
                     [
-                        map(lambda t: "%.2f" % t, [NewAngles[i][a]])
+                        ["%.2f" % t for t in [NewAngles[i][a]]]
                         for a in Data["anglenames"]
                     ],
-                )
+                ))
             )
         )
         Data["Label" + str(n)] = (
@@ -956,7 +957,7 @@ def PlotAngles(StructureSets, args, NewAngles=[], show=True):
     # Put together the pipestring #
     ###############################
     pipestring = ""
-    Fields = Data.keys()
+    Fields = list(Data.keys())
     pipestring += "\t".join(Fields) + "\n"
     # Write to the pipestring as long as the longest vector nans otherwise.
     i = 0
@@ -1006,7 +1007,7 @@ def ShowPymol(StructureSets, args):
     else:
         try:
             n = int(args.nalign)
-        except ValueError, e:
+        except ValueError as e:
             sys.stderr.write("Warning: %s, setting nalign=10\n" % e)
             n = 10
 
@@ -1020,7 +1021,7 @@ def ShowPymol(StructureSets, args):
         ]:  # Shows a maximum of 10 structures from each set by default
             name = s + "_" + Set.color
             try:
-                if User_Angles.has_key(s):
+                if s in User_Angles:
                     cmd.load(
                         os.path.join(user_datapath, "user_fvs", s + ".pdb"), object=name
                     )

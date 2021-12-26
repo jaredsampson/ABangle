@@ -25,14 +25,13 @@ import math
 import sys
 import os
 import tempfile
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import itertools
-import io
-import re
 import pathlib
-import collections
 from Bio.PDB.PDBParser import PDBParser
 from abangle import dataIO
+from typing import List
+from dataclasses import dataclass
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
@@ -119,7 +118,7 @@ aa3 = [
     "TYR",
     "TRP",
 ]
-aa3to1 = dict(zip(aa3, AA))
+aa3to1 = dict(list(zip(aa3, AA)))
 
 # Read in known sequences
 Sequences, Residues = dataIO.load(
@@ -188,6 +187,7 @@ class PDB:
             chain for chain in self.Chains if self.Chains[chain].type in ["H", "L"]
         ]
 
+        # TODO test with pdb in scfv format (both H and L are in single chain) with http://opig.stats.ox.ac.uk/webapps/newsabdab/sabdab/structureviewer/?pdb=6lfm
         # If the user has provided a chain id for a single chain fv then create a new chain object with the unannotated atoms
         if self.args.scfv and self.ABchains:
             if self.verbose:
@@ -447,7 +447,7 @@ def OnlineAnnotation(sequence):
     )  # chothia numbering input
     Annfd, Annfile = tempfile.mkstemp(".dat", "annot")
     try:
-        urllib.urlretrieve(Url, Annfile)
+        urllib.request.urlretrieve(Url, Annfile)
     except IOError:
         raise Exception(
             "Online annotation failed. Unable to access %s. Please check you have working internet connection and the ABnum server is functioning.\n"
@@ -609,8 +609,8 @@ def mapvectors(fname, PAPS_def=False):
     H2 = [cH[i] + Hpos[1][i] for i in range(3)]
 
     # Do the transfomation onto the
-    Lpoints = list(map(lambda x: transform(x, uL), (cL, L1, L2)))
-    Hpoints = list(map(lambda x: transform(x, uH), (cH, H1, H2)))
+    Lpoints = list([transform(x, uL) for x in (cL, L1, L2)])
+    Hpoints = list([transform(x, uH) for x in (cH, H1, H2)])
 
     return Lpoints, Hpoints
 
@@ -690,8 +690,8 @@ def transform(coords, u):
     return [X, Y, Z]
 
 def normalise(vec):
-    mag = (sum(list(map(lambda x: x ** 2, vec)))) ** 0.5
-    return list(map(lambda x: x / mag, vec))
+    mag = (sum(list([x ** 2 for x in vec]))) ** 0.5
+    return list([x / mag for x in vec])
 
 def angles(fname):
     """Calculate the orientation measures for the structure in fname"""
@@ -701,18 +701,17 @@ def angles(fname):
 
     # Create vectors with which to calculate angles between.
     C = normalise([Hpoints[0][i] - Lpoints[0][i] for i in range(3)])
-    Cminus = list(map(lambda x: -1 * x, C))
+    Cminus = list([-1 * x for x in C])
     L1 = normalise([Lpoints[1][i] - Lpoints[0][i] for i in range(3)])
     L2 = normalise([Lpoints[2][i] - Lpoints[0][i] for i in range(3)])
     H1 = normalise([Hpoints[1][i] - Hpoints[0][i] for i in range(3)])
     H2 = normalise([Hpoints[2][i] - Hpoints[0][i] for i in range(3)])
     dc = (
-        sum(map(lambda x: x ** 2, [Hpoints[0][i] - Lpoints[0][i] for i in range(3)]))
+        sum([x ** 2 for x in [Hpoints[0][i] - Lpoints[0][i] for i in range(3)]])
         ** 0.5
     )
 
     # Projection of the L1 and H1 vectors onto the plane perpendicular to the centroid vector.
-    print(L1, C)
     n_x = numpy.cross(L1, C)
     n_y = numpy.cross(C, n_x)
 
@@ -745,7 +744,7 @@ def angles(fname):
 
     # Return the angles and the separation distance.
     return dict(
-        zip(["HL", "HC1", "LC1", "HC2", "LC2", "dc"], [HL, HC1, LC1, HC2, LC2, dc])
+        list(zip(["HL", "HC1", "LC1", "HC2", "LC2", "dc"], [HL, HC1, LC1, HC2, LC2, dc]))
     )
 
 
@@ -829,7 +828,7 @@ def ChangeUserPath(args):
         sys.stdout.write("Current user_datapath is: %s\n" % user_datapath)
     elif savedpath:
         sys.stdout.write("Saved user_datapath: %s was not found\n" % savedpath)
-    p = raw_input("Please provide a path to place a user repository (s to skip):\n")
+    p = input("Please provide a path to place a user repository (s to skip):\n")
     if p.lower() == "s":
         return False
 
@@ -881,7 +880,7 @@ def ChangeNumberingProgPath(args):
         )
 
     while 1:
-        a = raw_input(
+        a = input(
             "Use public webserver numbering (http://www.bioinf.org.uk/abs/abnum/) for all numbering? y/n/q\n"
         )
         if a.lower() == "q":
@@ -895,7 +894,7 @@ def ChangeNumberingProgPath(args):
             sys.stdout.write(
                 "Only abysis is currently supported for local numbering.\n"
             )
-            p = raw_input(
+            p = input(
                 "Provide path to numbering script (kabnum_wrapper.pl for abysis)? y/n/q\n"
             )
             if p.lower() == "q":
@@ -907,7 +906,7 @@ def ChangeNumberingProgPath(args):
                 "User must either allow online numbering or local numbering with abysis. Quitting\n"
             )
         else:
-            newpath = raw_input(
+            newpath = input(
                 "Path to numbering script (kabnum_wrapper.pl for abysis): "
             )
             if newpath.endswith("kabnum_wrapper.pl"):
@@ -929,9 +928,9 @@ def DeleteStore(remove):
         raise Exception("No user data found")
 
     if remove[0] == "all":
-        remove = dataIO.load(
+        remove = list(dataIO.load(
             os.path.join(user_datapath, "UserAngles.dat"), header=True, rownames=0
-        )[0].keys()
+        )[0].keys())
         # This wipes the userdata angle store and rewrites the header
         CreateStore()
         sys.stdout.write("User's data deleted\n")
@@ -1057,7 +1056,7 @@ def AppendSequenceStore(structure, seq, mode, remove=False):
         UserSequencesDict, UserResidues = {}, Residues
 
     # Check that there is a column for each of the residues that have been annotated in the new sequence. Change the mode to 'r' if additional column is required.
-    for r in seq.keys():
+    for r in list(seq.keys()):
         if r not in UserResidues:
             UserResidues.append(r)
             mode = "r"
@@ -1119,9 +1118,9 @@ def CheckNamespace(args):
         CurrentNames = []
         for name in [
             n.split("_")
-            for n in dataIO.load(
+            for n in list(dataIO.load(
                 os.path.join(user_datapath, "UserAngles.dat"), header=True, rownames=0
-            )[0].keys()
+            )[0].keys())
         ]:
             if len(name) == 2:
                 CurrentNames.append(name[0])
@@ -1140,8 +1139,8 @@ def CheckNamespace(args):
     NewFileNames = {}
     StoreMode = {}
 
-    PathsFiles = map(os.path.split, args.i)
-    names = map(lambda x: os.path.splitext(x[1])[0], PathsFiles)
+    PathsFiles = list(map(os.path.split, args.i))
+    names = [os.path.splitext(x[1])[0] for x in PathsFiles]
 
     for n in range(len(names)):
         if names[n] in CurrentNames:
@@ -1150,7 +1149,7 @@ def CheckNamespace(args):
                 % names[n]
             )
             while 1:
-                answer = raw_input("o/r/s: ").lower()
+                answer = input("o/r/s: ").lower()
                 if answer in "ors":
                     break
             sys.stdout.write("\n")
@@ -1159,7 +1158,7 @@ def CheckNamespace(args):
                 StoreMode[names[n]] = "r"
             elif answer == "r":
                 while 1:
-                    newname = raw_input(
+                    newname = input(
                         "\nNew name (no file extension). Leave blank to skip structure: "
                     )
                     if not newname:
@@ -1194,7 +1193,7 @@ def GetAngles(args):
         elif not args.store:
             out.write("Store new data in userdata? (local storage only)\n")
             while 1:
-                answer = raw_input("Y/N: ")
+                answer = input("Y/N: ")
                 if answer.upper() in ["Y", "N"]:
                     break
             if answer.upper() == "Y":
@@ -1263,3 +1262,32 @@ def GetAngles(args):
         return NewAngles
     except Exception as exe:
         raise Exception("Angle calculation failed: " + str(exe) + "\n")
+
+@dataclass
+class GetAnglesargs:
+    """class to simulate the arguments the GetAngles function would receive were it being called from the command line
+    used in testing module output against benchmarks"""
+    i: str 
+    name: str
+    scfv: List = None
+    store: str = 'n'
+    q: bool = True
+    usernumbered: bool = True
+
+def validate_angles(file, HC2, HC1, LC2, LC1, dc, HL, rel_tol=1e-2):
+    name = file[:4]
+    angle_keys = ['HC2', 'HC1', 'LC2', 'LC1', 'dc', 'HL']
+    true_angles = [HC2, HC1, LC2, LC1, dc, HL]
+    args = GetAnglesargs(examples/file, name)
+    new_angles = GetAngles(args)[f'{name}_HL']
+    assert all([math.isclose(new_angles[key], angle, rel_tol=rel_tol) for key, angle in zip(angle_keys, true_angles)])
+
+if __name__ == '__main__':
+    
+    examples = data_path/'example_pdbs'
+
+    angles_4KQ3 = {'HC2':114.97, 'HC1':71.58, 'LC2':83.15, 'LC1':119.49, 'dc':16.00, 'HL':-61.10}
+
+    validate_angles('4KQ3_abnum.pdb', **angles_4KQ3)
+    
+

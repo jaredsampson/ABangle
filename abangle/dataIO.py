@@ -52,7 +52,7 @@ def load(
     datafile = open(fname).readlines()
 
     if conv:
-        dat = [map(convert, l.split()) for l in datafile]
+        dat = [list(map(convert, l.split())) for l in datafile]
     else:
         dat = list(map(str.split, datafile))
 
@@ -90,7 +90,7 @@ def load(
         if coltype is dict:
             if rowtype is dict:
                 dataout = dict(
-                    zip(
+                    list(zip(
                         colnames,
                         (
                             dict(
@@ -99,17 +99,17 @@ def load(
                             )
                             for v in range(len(colnames))
                         ),
-                    )
+                    ))
                 )
             if rowtype is list:
                 dataout = dict(
-                    zip(
+                    list(zip(
                         colnames,
                         (
                             [dat[j:][u][i:][v] for u in range(len(rownames))]
                             for v in range(len(colnames))
                         ),
-                    )
+                    ))
                 )
         else:  # coltype is list
             if rowtype is dict:
@@ -126,10 +126,10 @@ def load(
         if rowtype is dict:
             if coltype is dict:
                 dataout = dict(
-                    zip(rownames, map(lambda x: dict(zip(colnames, x[i:])), dat[j:]))
+                    list(zip(rownames, [dict(list(zip(colnames, x[i:]))) for x in dat[j:]]))
                 )
             elif coltype is list:
-                dataout = dict(zip(rownames, [x[i:] for x in dat[j:]]))
+                dataout = dict(list(zip(rownames, [x[i:] for x in dat[j:]])))
             elif coltype is str:
                 dataout = dict(
                     (rownames[r], datafile[j:][r][len(rownames[r]) :])
@@ -137,7 +137,7 @@ def load(
                 )
         elif rowtype is list:
             if coltype is dict:
-                dataout = map(lambda x: dict(zip(colnames, x[i:])), dat[j:])
+                dataout = [dict(list(zip(colnames, x[i:]))) for x in dat[j:]]
             elif coltype is list:
                 dataout = [x[i:] for x in dat[j:]]
             elif coltype is str:
@@ -163,11 +163,11 @@ def print_table(table, out):
     for i in range(len(table[0])):
         col_paddings.append(get_max_width(table, i))
     for row in table:
-        print(row[0].ljust(col_paddings[0] + 1), file=out)
+        print(row[0].ljust(col_paddings[0] + 1), end=' ', file=out)
         for i in range(1, len(row)):
             col = format_data(row[i]).rjust(col_paddings[i] + 1)
-            print(col, file=out)
-        print(out)
+            print(col, end=' ', file=out)
+        print(file=out)
 
 
 def format_data(dat):

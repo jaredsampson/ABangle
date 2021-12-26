@@ -100,7 +100,7 @@ def tmalignconsensus(
         for line in line_it:
             if 4 >= rowcount > 0:
                 if rowcount >= 2:
-                    a = map(float, line.split())
+                    a = list(map(float, line.split()))
                     matrix.extend(a[2:5])
                     matrix.append(a[1])
                 rowcount += 1
@@ -113,7 +113,7 @@ def tmalignconsensus(
                 if match is not None:
                     r = float(match.group(1))
             if not quiet:
-                print(line.rstrip())
+                print((line.rstrip()))
         if matrix or attempt:
             break
         else:
@@ -125,7 +125,7 @@ def tmalignconsensus(
     if not quiet:
         for i in range(0, len(alignment[0]) - 1, 78):
             for line in alignment:
-                print(line[i : i + 78])
+                print((line[i : i + 78]))
             print('')
 
     assert len(matrix) == 3 * 4
@@ -187,13 +187,13 @@ def buildaxes(name, vectorlength=10, color="yellow"):
     Lpoints, Hpoints = calculate.mapvectors(_tmp_fname, [])
 
     C = normalise([Hpoints[0][i] - Lpoints[0][i] for i in range(3)])
-    Cminus = map(lambda x: -1 * x, C)
+    Cminus = [-1 * x for x in C]
     L1 = normalise([Lpoints[1][i] - Lpoints[0][i] for i in range(3)])
     L2 = normalise([Lpoints[2][i] - Lpoints[0][i] for i in range(3)])
     H1 = normalise([Hpoints[1][i] - Hpoints[0][i] for i in range(3)])
     H2 = normalise([Hpoints[2][i] - Hpoints[0][i] for i in range(3)])
     dc = (
-        sum(map(lambda x: x ** 2, [Hpoints[0][i] - Lpoints[0][i] for i in range(3)]))
+        sum([x ** 2 for x in [Hpoints[0][i] - Lpoints[0][i] for i in range(3)]])
         ** 0.5
     )
     points["VLC"] = Lpoints[0]
@@ -216,10 +216,10 @@ def buildaxes(name, vectorlength=10, color="yellow"):
     )
 
     numbers = dict(
-        zip(
+        list(zip(
             ["VLC", "VHC", "VL1", "VL2", "VH1", "VH2"],
             [1001, 1002, 1003, 1004, 1005, 1006],
-        )
+        ))
     )
 
     for p in points:
@@ -275,12 +275,12 @@ def buildaxes(name, vectorlength=10, color="yellow"):
 
 # FIXME normalize defined in both calculate and align?? is this one accessed? if not can we delete
 def normalise(a, length=1):
-    mag = (sum(map(lambda x: x ** 2, a))) ** 0.5
-    return map(lambda x: length * x / mag, a)
+    mag = (sum([x ** 2 for x in a])) ** 0.5
+    return [length * x / mag for x in a]
 
 
 def ADD(a, b):
     return [a[i] + b[i] for i in range(3)]
 
 if __name__ == '__main__':
-    print(os.path.join(os.path.split(__file__)[0], "data"))
+    print((os.path.join(os.path.split(__file__)[0], "data")))
