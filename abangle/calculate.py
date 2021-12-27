@@ -30,6 +30,7 @@ import itertools
 import pathlib
 from Bio.PDB.PDBParser import PDBParser
 from abangle import dataIO
+from abangle.constants import coreset, centroids
 from typing import List
 from dataclasses import dataclass
 
@@ -54,14 +55,6 @@ try:
 except IOError:
     AnnotationProgPath = ""
 
-# Get coreset positions
-coresetL = [
-    l.strip()[1:] for l in open(os.path.join(data_path, "Lcoresetfw.txt")).readlines()
-]
-coresetH = [
-    l.strip()[1:] for l in open(os.path.join(data_path, "Hcoresetfw.txt")).readlines()
-]
-
 # Read in the plane vectors precalculated on the consensus structure
 Lpos = [
     [float(num) for num in line.split()] 
@@ -72,6 +65,8 @@ Hpos = [
     [float(num) for num in line.split()] 
     for line in (data_path/'pcH.txt').open()
 ]
+
+
 
 # Amino acid translation
 AA = [
@@ -556,9 +551,9 @@ def create_coreset(fname):
             l = line.split()
             if not "ATOM" in line:
                 continue
-            elif l[4] == "L" and l[5] in coresetL:
+            elif l[4] == "L" and l[5] in coreset['light']:
                 Ltmp.write(line)
-            elif l[4] == "H" and l[5] in coresetH:
+            elif l[4] == "H" and l[5] in coreset['heavy']:
                 Htmp.write(line)  
         Htmp.close()
         Ltmp.close()
@@ -566,13 +561,8 @@ def create_coreset(fname):
         os.remove(Hf)
         os.remove(Lf)
         raise Exception(str(exe) + "\n")
-
-    with open(Hf) as f:
-        with open('Hf.pdb', 'w') as w:
-            w.write(f.read())
     
     return Hf, Lf
-
 
 def mapvectors(fname, PAPS_def=False):
     """Maps the reference frames (planes) onto to VH and VL domains of an Fv structure (fname is chothia numbered pdb file
@@ -583,30 +573,30 @@ def mapvectors(fname, PAPS_def=False):
     
     uL = align(os.path.join(data_path, "consensus_L.pdb"), Lf)
     uH = align(os.path.join(data_path, "consensus_H.pdb"), Hf)
-    # os.remove(Hf)
-    # os.remove(Lf)
+    os.remove(Hf)
+    os.remove(Lf)
 
     if PAPS_def:
         # The centroids of interface residues.
-        cH = Hpos[2]
-        cL = Lpos[2]
+        cH = centroids['heavy'][2]
+        cL = centroids['light'][2]
     else:
         # The minimally varying centroid vector is at. As calculated.:
         cH = [
-            -10 * 0.5 * Hpos[0][i] + 1 * 0.5 * Hpos[1][i] + Hpos[2][i] for i in range(3)
+            -10 * 0.5 * centroids['heavy'][0][i] + 1 * 0.5 * centroids['heavy'][1][i] + centroids['heavy'][2][i] for i in range(3)
         ]
         cL = [
-            6 * 0.5 * Lpos[0][i] - 2 * 0.5 * Lpos[1][i] + Lpos[2][i] for i in range(3)
+            6 * 0.5 * centroids['light'][0][i] - 2 * 0.5 * centroids['light'][1][i] + centroids['light'][2][i] for i in range(3)
         ]
 
     # Define the plane vectors from the centroid point
     # On VL domain
-    L1 = [cL[i] + Lpos[0][i] for i in range(3)]
-    L2 = [cL[i] + Lpos[1][i] for i in range(3)]
+    L1 = [cL[i] + centroids['light'][0][i] for i in range(3)]
+    L2 = [cL[i] + centroids['light'][1][i] for i in range(3)]
 
     # On VH domain
-    H1 = [cH[i] + Hpos[0][i] for i in range(3)]
-    H2 = [cH[i] + Hpos[1][i] for i in range(3)]
+    H1 = [cH[i] + centroids['heavy'][0][i] for i in range(3)]
+    H2 = [cH[i] + centroids['heavy'][1][i] for i in range(3)]
 
     # Do the transfomation onto the
     Lpoints = list([transform(x, uL) for x in (cL, L1, L2)])
@@ -1211,13 +1201,16 @@ def GetAngles(args):
             NewFileNames, StoreMode = CheckNamespace(args)
             NewFvRegions, StoreMode, FvSequences = get_fvs(NewFileNames, StoreMode, args)
         else:
+            # FIXME 
             # NewFileNames = dict(
             #     zip(
             #         map(lambda x: os.path.splitext(os.path.split(x)[1])[0], args.i),
             #         args.i,
             #     )
             # )
+            # temporary patch #
             NewFileNames = {args.name: args.i}
+            ###################
             NewFvRegions, StoreMode, FvSequences = get_fvs(
                 NewFileNames, {}, args
             )  # StoreMode will come back empty
@@ -1287,7 +1280,10 @@ if __name__ == '__main__':
     examples = data_path/'example_pdbs'
 
     angles_4KQ3 = {'HC2':114.97, 'HC1':71.58, 'LC2':83.15, 'LC1':119.49, 'dc':16.00, 'HL':-61.10}
+    validate_angles('4KQ3_Fv.pdb', **angles_4KQ3)
 
-    validate_angles('4KQ3_abnum.pdb', **angles_4KQ3)
-    
+    angles_2ATK = {'HL': -54.09, 'HC1': 70.76, 'HC2': 114.09, 'LC1': 123.29, 'LC2': 83.42, 'dc': 16.48}
+    validate_angles('2ATK_Fv.pdb', **angles_2ATK)
 
+    angles_1U8L = {'HL': -56.41, 'HC1': 68.73, 'HC2': 118.87, 'LC1': 123.11, 'LC2': 82.99, 'dc': 15.88}
+    validate_angles('1U8L_Fv.pdb', **angles_1U8L)
