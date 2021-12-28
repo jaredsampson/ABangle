@@ -890,7 +890,7 @@ def AppendAngleStore(structure, dat, seq, mode, remove=False):
         UserAngles = open(os.path.join(user_datapath, "UserAngles.dat"), mode)
 
     if not remove:
-        dat["H3length"] = H3LoopLength(seq, 'H3')
+        dat["H3length"] = get_loop_length(seq, 'H3')
         dat["L1length"] = get_loop_length(seq, 'L1')
     try:
         lines = UserAngles.readlines()
