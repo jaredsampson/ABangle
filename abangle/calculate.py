@@ -30,7 +30,7 @@ import itertools
 import pathlib
 from Bio.PDB.PDBParser import PDBParser
 from abangle import dataIO
-from abangle.constants import coreset, centroids
+from abangle.constants import coreset, centroids, aa_code_dict
 from typing import List
 from dataclasses import dataclass
 
@@ -54,66 +54,6 @@ try:
     )
 except IOError:
     AnnotationProgPath = ""
-
-# Read in the plane vectors precalculated on the consensus structure
-Lpos = [
-    [float(num) for num in line.split()] 
-    for line in (data_path/'pcL.txt').open()
-]
-
-Hpos = [
-    [float(num) for num in line.split()] 
-    for line in (data_path/'pcH.txt').open()
-]
-
-
-
-# Amino acid translation
-AA = [
-    "R",
-    "H",
-    "K",
-    "D",
-    "E",
-    "S",
-    "T",
-    "N",
-    "Q",
-    "C",
-    "G",
-    "P",
-    "A",
-    "V",
-    "I",
-    "L",
-    "M",
-    "F",
-    "Y",
-    "W",
-]
-aa3 = [
-    "ARG",
-    "HIS",
-    "LYS",
-    "ASP",
-    "GLU",
-    "SER",
-    "THR",
-    "ASN",
-    "GLN",
-    "CYS",
-    "GLY",
-    "PRO",
-    "ALA",
-    "VAL",
-    "ILE",
-    "LEU",
-    "MET",
-    "PHE",
-    "TYR",
-    "TRP",
-]
-aa3to1 = dict(list(zip(aa3, AA)))
 
 # Read in known sequences
 Sequences, Residues = dataIO.load(
@@ -502,12 +442,12 @@ def pdb2pir(lines):
             continue
         aa = line[16:20].strip()
         try:
-            seq.append(aa3to1[aa])  # try to append the one letter code to the sequence.
+            seq.append(aa_code_dict[aa])  # try to append the one letter code to the sequence.
         except KeyError:  # if we fail then there may be multiple occupancy
             if len(aa) == 4:  # check for residue name such as ASER or BSER
                 aa3 = aa[1:]
                 try:
-                    seq.append(aa3to1[aa3])
+                    seq.append(aa_code_dict[aa3])
                 except KeyError:
                     sys.stderr.write(
                         "Warning: skipping atom: Unknown aa type: %s\n" % aa
@@ -737,42 +677,28 @@ def angles(fname):
         list(zip(["HL", "HC1", "LC1", "HC2", "LC2", "dc"], [HL, HC1, LC1, HC2, LC2, dc]))
     )
 
-
-def H3LoopLength(seq):
-    # Chothia definition of H3 - residues and insertions
-    H3 = ["H95", "H96", "H97", "H98", "H99", "H100", "H101", "H102"]
+def get_loop_length(seq, loop):
+    
+    if loop == 'L1':
+        residues = ["L24", "L25", "L26", "L27", "L28", "L29", "L30", "L31", "L32", "L33", "L34"]
+    elif loop == 'H3':
+        residues = ["H95", "H96", "H97", "H98", "H99", "H100", "H101", "H102"]
+    else:
+        raise ValueError('Loop not recognized')
+    
     n = 0
-    for res in seq:
-        try:
-            int(res[-1])
-            if res in H3:
-                if seq[res] != "-":
+    for res, aa in seq.items():
+        if aa != "-":
+            if res[-1].isdigit():
+                if res in residues:
                     n += 1
-        except ValueError:
-            # The residue numbering ends in a letter.
-            if res[:-1] in H3:
-                if seq[res] != "-":
+            elif res[-1].isalpha():
+                if res[:-1] in residues:
                     n += 1
+            else:
+                continue
+    
     return n
-
-
-def L1LoopLength(seq):
-    # Chothia definition of L1 - residues and insertions
-    L1 = ["L24", "L25", "L26", "L27", "L28", "L29", "L30", "L31", "L32", "L33", "L34"]
-    n = 0
-    for res in seq:
-        try:
-            int(res[-1])
-            if res in L1:
-                if seq[res] != "-":
-                    n += 1
-        except ValueError:
-            # The residue numbering ends in a letter.
-            if res[:-1] in L1:
-                if seq[res] != "-":
-                    n += 1
-    return n
-
 
 ###########################################
 # Parsing functions and control functions #
@@ -911,7 +837,6 @@ def ChangeNumberingProgPath(args):
     Progfname.write(AnnotationProgPath)
     Progfname.close()
 
-
 def DeleteStore(remove):
     """Function to delete entries for the datafiles"""
     if not user_datapath:
@@ -941,7 +866,6 @@ def DeleteStore(remove):
                 "Warning: Structure %s was not found in the users' store\n" % fname
             )
 
-
 def CreateStore():
     """Create storage files for user data. This stores the orientation measures and the angles for the data that the user has inputted (and saved/stored).
     These files are in the same format as Angles.dat and Sequences.dat in the abangle/data/ directory."""
@@ -966,8 +890,8 @@ def AppendAngleStore(structure, dat, seq, mode, remove=False):
         UserAngles = open(os.path.join(user_datapath, "UserAngles.dat"), mode)
 
     if not remove:
-        dat["H3length"] = H3LoopLength(seq)
-        dat["L1length"] = L1LoopLength(seq)
+        dat["H3length"] = H3LoopLength(seq, 'H3')
+        dat["L1length"] = get_loop_length(seq, 'L1')
     try:
         lines = UserAngles.readlines()
         # opened in read mode - overwrite record for stored data.
