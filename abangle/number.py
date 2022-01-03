@@ -45,7 +45,7 @@ class AtomRecord:
             try:
                 replacement = correct_type(replacement)
             except ValueError:
-                print(f'Could not cast {attr} to {correct_type}')
+                raise ValueError(f'Could not cast {attr} to {correct_type}')
         setattr(self, attr, replacement)
         
     @property
@@ -53,10 +53,10 @@ class AtomRecord:
         """Method for correctly formatting the attributes of an atom record for writing to a pdb file.
 
         Returns:
-            str: A string representation of an atom that conforms to the pdb file format guide found.
+            str: A string representation of an atom that conforms to the pdb file format guide found
             here http://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM. 
         """
-        return "{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}\n".format(*self.__dict__.values()) #Code borrowed from https://cupnet.net/pdb-format/
+        return "{:6s}{:5d}  {:<3s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}\n".format(*self.__dict__.values()) #Code borrowed from https://cupnet.net/pdb-format/
 
     @classmethod
     def from_string(cls, raw: str) -> None:
@@ -64,7 +64,7 @@ class AtomRecord:
         Can be used in list comp i.e. '[AtomRecord.from_string(line) for line in pdb_file_handle.readlines()].
 
         Args:
-            raw (str): a raw string representing one line in a pdb file.
+            raw (str): A raw string representing one line in a pdb file.
 
         Returns:
             AtomRecord: An AtomRecord object.
@@ -103,7 +103,7 @@ class AtomRecordCollection:
     """Container for AtomRecord instances that allows convenient editing of multiple records simultaneously."""
     def __init__(self, name: str, records: List[AtomRecord]) -> None:
         self.name = name
-        self.atoms = records
+        self.records = records
 
     def write_to_pdb(self, path: pathlib.Path) -> None:
         """Method for writing atom records to a pdb file with correct formatting.
@@ -111,8 +111,9 @@ class AtomRecordCollection:
         Args:
             path (pathlib.Path): Output file path.
         """
+
         with open(path, 'w') as f:
-            for atom in self.atoms:
+            for atom in self.records:
                 f.write(atom.pdb_formatted_string)
 
     def _get_new_numbering(self) -> Tuple:
@@ -169,26 +170,14 @@ class AtomRecordCollection:
         
         return dict(key_map)
 
-    def _create_key(self, chain: str, number: int, insertion_code: str) -> str:
-        """Method for creating a key for each AtomRecord that can be used to look up the correct number when renumbering Fv chains.
-
-        Args:
-            chain (str): Chain identifier e.g. 'A'.
-            number (int): Residue number e.g. 100.
-            insertion_code (str): e.g. 'B' or ''.
-
-        Returns:
-            str: Unique residue key e.g. 'A_100_B'.
-        """
-        return '_'.join([chain, str(number), insertion_code])
 
     def renumber_residues(self) -> None:
         """Iterates through AtomRecord object and creates unique residue key. Key is then used to look up the.
-        new chain id, number and insertion code in new numbering scheme. New numbering is applied and atoms.
+        new chain id, number and insertion code in new numbering scheme. New numbering is applied and records.
         not in the Fv are dripped.
         """
         key_mapping = self._map_old_to_new_numbering()
-        for atom in self.atoms:
+        for atom in self.records:
             key = self._create_key(atom.chain_identifier, atom.residue_sequence_number, atom.insertion_code)
             
             if key in key_mapping:
@@ -201,18 +190,19 @@ class AtomRecordCollection:
                 for attr, replacement in replacement_attrs:
                     atom.reset_attribute(attr, replacement)
         
-        self.atoms = [atom for atom in self.atoms if atom.chain_identifier in ('H', 'L')]
+        self.records = [atom for atom in self.records if atom.chain_identifier in ('H', 'L')]
 
     @property
     def indexed_sequence(self) -> List[Tuple]:
-        """Method iterates through alpha carbon atoms to create mapping between residue key: residue e.g. [..., ('A_100_A', 'G'), ('A_100_B', 'H')].
+        """Method iterates through alpha carbon records to create mapping between residue key: residue e.g. [..., ('A_100_A', 'G'), ('A_100_B', 'H')].
 
         Returns:
             List[Tuple]: List of residues mapped to their unique residue key.
         """
+
         return [
             (self._create_key(atom.chain_identifier, atom.residue_sequence_number, atom.insertion_code), aa_codes_3to1[atom.residue_name])
-            for atom in self.atoms
+            for atom in self.records
             if atom.atom_name == 'CA' # only use alpha carbon
         ]
 
@@ -238,25 +228,34 @@ class AtomRecordCollection:
         ])
     
     @classmethod
-    def from_atoms(cls, name: str, atoms: List[AtomRecord]) -> None:
+    def from_records(cls, name: str, records: List[AtomRecord]) -> None:
         """Class method for creating an AtomRecordCollection instance from a list of AtomRecords.
 
         Args:
             name (str): Name of the structure the AtomRecords belong to.
-            atoms (List[AtomRecord]): A list of AtomRecord instances belonging to a single pdb structure.
+            records (List[AtomRecord]): A list of AtomRecord instances belonging to a single pdb structure.
 
         Returns:
             AtomRecordCollection.
         """
-        return cls(name, atoms)
+        return cls(name, records)
 
+    @staticmethod
+    def _create_key(chain: str, number: int, insertion_code: str) -> str:
+        """Method for creating a key for each AtomRecord that can be used to look up the correct number when renumbering Fv chains.
+
+        Args:
+            chain (str): Chain identifier e.g. 'A'.
+            number (int): Residue number e.g. 100.
+            insertion_code (str): e.g. 'B' or ''.
+
+        Returns:
+            str: Unique residue key e.g. 'A_100_B'.
+        """
+        return '_'.join([chain, str(number), insertion_code])
+    
     def __repr__(self) -> str:
-        return f'{len(self.atoms)} atoms from structure {self.name}'
+        return f'{len(self.records)} records from structure {self.name}'
 
 if __name__ == '__main__':
-    data_path = pathlib.Path().parent/'tests'/'data'
-    pdb_original = (data_path/'1U8L.pdb').read_text().splitlines()
-    atoms = [AtomRecord.from_string(line) for line in pdb_original if line.startswith('ATOM')]
-    records = AtomRecordCollection.from_file(data_path/'1U8L.pdb')
-    records.renumber_residues()
-    records.write_to_pdb(data_path/'test.pdb')
+    pass
