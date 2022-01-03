@@ -1,251 +1,81 @@
 from abangle.number import *
-from Bio.PDB.Model import Model
 import pytest
-import io
-import pickle
+import tempfile
 
 @pytest.fixture
-def atom():
-    return Atom.from_string('ATOM   2548  ND2 ASN B 100L     11.589  51.827  83.313  1.00 35.77           N  ')
+def pdb_string(datadir):
+    return (datadir / 'pdb_str.txt').read_text()
 
-@pytest.fixture
-def pdb(datadir):
-    pdb = (datadir / 'pdb_str.txt').read_text()
-    return io.StringIO(pdb)
+def test_AtomRecord_constructor_from_string(pdb_string):
+    atom_record = AtomRecord.from_string(pdb_string.splitlines()[0])
+    assert atom_record.atom == 'ATOM'
+    assert atom_record.atom_serial_number == 3338
+    assert atom_record.atom_name == 'N'
+    assert atom_record.alternate_location_indicator == ''
+    assert atom_record.residue_name == 'SER'
+    assert atom_record.chain_identifier == 'B'
+    assert atom_record.residue_sequence_number == 215
+    assert atom_record.insertion_code == ''
+    assert atom_record.x_coordinate == 6.364
+    assert atom_record.y_coordinate == 9.072
+    assert atom_record.z_coordinate == 33.809
+    assert atom_record.occupancy == 1.00
+    assert atom_record.element_symbol == 'N'  
 
-@pytest.fixture
-def chain_seq_dict(datadir):
-    with open(datadir/'chain_seq_dict.pkl', 'rb') as f:
-        csd = pickle.load(f)
-    return csd
+def test_AtomRecord_reset_attribute_chain_id(pdb_string):
+    atom_record = AtomRecord.from_string(pdb_string.splitlines()[0])
+    assert atom_record.chain_identifier == 'B'
+    atom_record.reset_attribute('chain_identifier', 'H')
+    assert atom_record.chain_identifier == 'H'
 
-# @pytest.fixture
-# def chain_seq_dict():
-#     return {
-#         'A': {
-#             ('1', ' '): 'A', ('2', ' '): 'L', ('3', ' '): 'Q', ('4', ' '): 'L', ('5', ' '): 'T', 
-#             ('6', ' '): 'Q', ('7', ' '): 'S', ('8', ' '): 'P', ('9', ' '): 'S', ('10', ' '): 'S', 
-#             ('11', ' '): 'L', ('12', ' '): 'S', ('13', ' '): 'A', ('14', ' '): 'S', ('15', ' '): 'V', 
-#             ('16', ' '): 'G', ('17', ' '): 'D', ('18', ' '): 'R', ('19', ' '): 'I', ('20', ' '): 'T', 
-#             ('21', ' '): 'I', ('22', ' '): 'T', ('23', ' '): 'C', ('24', ' '): 'R', ('25', ' '): 'A', 
-#             ('26', ' '): 'S', ('27', ' '): 'Q', ('28', ' '): 'G', ('29', ' '): 'V', ('30', ' '): 'T', 
-#             ('31', ' '): 'S', ('32', ' '): 'A', ('33', ' '): 'L', ('34', ' '): 'A', ('35', ' '): 'W', 
-#             ('36', ' '): 'Y', ('37', ' '): 'R', ('38', ' '): 'Q', ('39', ' '): 'K', ('40', ' '): 'P', 
-#             ('41', ' '): 'G', ('42', ' '): 'S', ('43', ' '): 'P', ('44', ' '): 'P', ('45', ' '): 'Q', 
-#             ('46', ' '): 'L', ('47', ' '): 'L', ('48', ' '): 'I', ('49', ' '): 'Y', ('50', ' '): 'D', 
-#             ('51', ' '): 'A', ('52', ' '): 'S', ('53', ' '): 'S', ('54', ' '): 'L', ('55', ' '): 'E', 
-#             ('56', ' '): 'S', ('57', ' '): 'G', ('58', ' '): 'V', ('59', ' '): 'P', ('60', ' '): 'S', 
-#             ('61', ' '): 'R', ('62', ' '): 'F', ('63', ' '): 'S', ('64', ' '): 'G', ('65', ' '): 'S', 
-#             ('66', ' '): 'G', ('67', ' '): 'S', ('68', ' '): 'G', ('69', ' '): 'T', ('70', ' '): 'E', 
-#             ('71', ' '): 'F', ('72', ' '): 'T', ('73', ' '): 'L', ('74', ' '): 'T', ('75', ' '): 'I', 
-#             ('76', ' '): 'S', ('77', ' '): 'T', ('78', ' '): 'L', ('79', ' '): 'R', ('80', ' '): 'P', 
-#             ('81', ' '): 'E', ('82', ' '): 'D', ('83', ' '): 'F', ('84', ' '): 'A', ('85', ' '): 'T', 
-#             ('86', ' '): 'Y', ('87', ' '): 'Y', ('88', ' '): 'C', ('89', ' '): 'Q', ('90', ' '): 'Q', 
-#             ('91', ' '): 'L', ('92', ' '): 'H', ('93', ' '): 'F', ('94', ' '): 'Y', ('95', ' '): 'P', 
-#             ('96', ' '): 'H', ('97', ' '): 'T', ('98', ' '): 'F', ('99', ' '): 'G', ('100', ' '): 'G', 
-#             ('101', ' '): 'G', ('102', ' '): 'T', ('103', ' '): 'R', ('104', ' '): 'V', ('105', ' '): 'D', 
-#             ('106', ' '): 'V', ('107', ' '): 'R', ('108', ' '): 'R', ('109', ' '): 'T'}, 
-#         'B': {
-#             ('1', ' '): 'R', ('2', ' '): 'I', ('3', ' '): 'T', ('4', ' '): 'L', ('5', ' '): 'K', 
-#             ('6', ' '): 'E', ('7', ' '): 'S', ('8', ' '): 'G', ('9', ' '): 'P', ('10', ' '): 'P', 
-#             ('11', ' '): 'L', ('12', ' '): 'V', ('13', ' '): 'K', ('14', ' '): 'P', ('15', ' '): 'T', 
-#             ('16', ' '): 'Q', ('17', ' '): 'T', ('18', ' '): 'L', ('19', ' '): 'T', ('20', ' '): 'L', 
-#             ('21', ' '): 'T', ('22', ' '): 'C', ('23', ' '): 'S', ('24', ' '): 'F', ('25', ' '): 'S', 
-#             ('26', ' '): 'G', ('27', ' '): 'F', ('28', ' '): 'S', ('29', ' '): 'L', ('30', ' '): 'S', 
-#             ('31', ' '): 'D', ('32', ' '): 'F', ('33', ' '): 'G', ('34', ' '): 'V', ('35', ' '): 'G', 
-#             ('35', 'A'): 'V', ('35', 'B'): 'G', ('36', ' '): 'W', ('37', ' '): 'I', ('38', ' '): 'R', 
-#             ('39', ' '): 'Q', ('40', ' '): 'P', ('41', ' '): 'P', ('42', ' '): 'G', ('43', ' '): 'K', 
-#             ('44', ' '): 'A', ('45', ' '): 'L', ('46', ' '): 'E', ('47', ' '): 'W', ('48', ' '): 'L', 
-#             ('49', ' '): 'A', ('50', ' '): 'I', ('51', ' '): 'I', ('52', ' '): 'Y', ('53', ' '): 'S', 
-#             ('54', ' '): 'D', ('55', ' '): 'D', ('56', ' '): 'D', ('57', ' '): 'K', ('58', ' '): 'R', 
-#             ('59', ' '): 'Y', ('60', ' '): 'S', ('61', ' '): 'P', ('62', ' '): 'S', ('63', ' '): 'L', 
-#             ('64', ' '): 'N', ('65', ' '): 'T', ('66', ' '): 'R', ('67', ' '): 'L', ('68', ' '): 'T', 
-#             ('69', ' '): 'I', ('70', ' '): 'T', ('71', ' '): 'K', ('72', ' '): 'D', ('73', ' '): 'T', 
-#             ('74', ' '): 'S', ('75', ' '): 'K', ('76', ' '): 'N', ('77', ' '): 'Q', ('78', ' '): 'V', 
-#             ('79', ' '): 'V', ('80', ' '): 'L', ('81', ' '): 'V', ('82', ' '): 'M', ('82', 'A'): 'T', 
-#             ('82', 'B'): 'R', ('82', 'C'): 'V', ('83', ' '): 'S', ('84', ' '): 'P', ('85', ' '): 'V', 
-#             ('86', ' '): 'D', ('87', ' '): 'T', ('88', ' '): 'A', ('89', ' '): 'T', ('90', ' '): 'Y', 
-#             ('91', ' '): 'F', ('92', ' '): 'C', ('93', ' '): 'A', ('94', ' '): 'H', ('95', ' '): 'R', 
-#             ('96', ' '): 'R', ('97', ' '): 'G', ('98', ' '): 'P', ('99', ' '): 'T', ('100', ' '): 'T', 
-#             ('100', 'A'): 'L', ('100', 'B'): 'F', ('100', 'C'): 'G', ('100', 'D'): 'V', ('100', 'E'): 'P', 
-#             ('100', 'F'): 'I', ('100', 'G'): 'A', ('100', 'H'): 'R', ('100', 'I'): 'G', ('100', 'J'): 'P', 
-#             ('100', 'K'): 'V', ('100', 'L'): 'N', ('100', 'M'): 'A', ('100', 'N'): 'M', ('101', ' '): 'D', 
-#             ('102', ' '): 'V', ('103', ' '): 'W', ('104', ' '): 'G', ('105', ' '): 'Q', ('106', ' '): 'G', 
-#             ('107', ' '): 'I', ('108', ' '): 'T', ('109', ' '): 'V', ('110', ' '): 'T'}, 
-#         'C': {('1', ' '): 'D', ('2', ' '): 'L', ('3', ' '): 'D', 
-#             ('4', ' '): 'R', ('5', ' '): 'W', ('6', ' '): 'A', ('7', ' '): 'S'}}
+def test_AtomRecord_reset_attribute_residue_sequence_number(pdb_string):
+    atom_record = AtomRecord.from_string(pdb_string.splitlines()[0])
+    assert atom_record.residue_sequence_number == 215
+    atom_record.reset_attribute('residue_sequence_number', 216)
+    assert atom_record.residue_sequence_number == 216
 
-def test_atom_from_string(atom):
-    assert atom.atom == 'ATOM'  
-    assert atom.atom_serial_number == '2548'
-    assert atom.atom_name == 'ND2'
-    assert atom.residue_name == 'ASN'
-    assert atom.chain_identifier == 'B'
-    assert atom.residue_sequence_id == '100L'
-    assert atom.x_coordinate == '11.589'
-    assert atom.y_coordinate == '51.827'
-    assert atom.z_coordinate == '83.313'
-    assert atom.occupancy == '1.00'
-    assert atom.temperature_factor == '35.77'
-    assert atom.element_symbol == 'N'
+def test_AtomRecord_reset_attribute_wrong_type(pdb_string):
+    atom_record = AtomRecord.from_string(pdb_string.splitlines()[0])
+    with pytest.raises(ValueError):
+        assert atom_record.residue_sequence_number == 215
+        atom_record.reset_attribute('residue_sequence_number', 'B')
 
-def test_atom_reset_chain_identifier(atom):
-    assert atom.chain_identifier == 'B'
-    atom.reset_chain_identifier('H')
-    assert atom.chain_identifier == 'H'
+def test_AtomRecord_pdb_formatted_string(pdb_string):
+    atom_lines = [line for line in pdb_string.splitlines() if line.startswith('ATOM')]
+    records = [AtomRecord.from_string(line) for line in atom_lines]
+    assert all([
+        record.pdb_formatted_string.strip() == line.strip() # watch out for whitespace/\n chars at the end of string
+        for record, line in zip(records, atom_lines)
+    ])
 
-def test_atom_reset_residue_sequence_number(atom):
-    assert atom.residue_sequence_id == '100L'
-    atom.residue_sequence_id = '100'
-    assert atom.residue_sequence_id == '100'
-
-def test_atom_pdb_formatted_string(atom):
-    atom.pdb_formatted_string == 'ATOM   2548  ND2 ASN B 100L     11.589  51.827  83.313  1.00 35.77           N  \n'
-
-def test_split_residue_sequence_id(atom):
-    assert atom.split_residue_sequence_id('98') == ('98', ' ')
-
-def test_split_residue_sequence_id_with_letter(atom):
-    assert atom.split_residue_sequence_id('100A') == ('100', 'A')
-
-def test_get_model(pdb):
-    model = get_model('1PDB', pdb)
-    assert isinstance(model, Model)
-    assert [chain in model.get_list() for chain in ['B', 'C']]
-
-def test_get_chain_sequences(pdb):
-    model = get_model('1PDB', pdb)
-    assert get_chain_sequences(model) == {'B': {('215', ' '): 'S', ('216', ' '): 'C'}, 'C': {('1', ' '): 'D'}}
-
-def test_get_old2new_chain_mapping():
-    details = [[{'id': 'human_K',
-   'description': '',
-   'evalue': 1.3e-51,
-   'bitscore': 165.0,
-   'bias': 0.4,
-   'query_start': 0,
-   'query_end': 107,
-   'species': 'human',
-   'chain_type': 'K',
-   'scheme': 'chothia',
-   'query_name': 'A'}]]
-
-    get_old2new_chain_mapping(details) == {'A': 'L'}
-
-def test_parse_anarci_numbering():
-    numbering = [
-        [([((1, ' '), 'A'), ((2, ' '), 'L'), ((107, ' '), 'R')], 0, 106)], 
-        [([((1, ' '), 'R'), ((2, ' '), 'I'), ((113, ' '), 'S')], 0, 131)], 
-        None
+def test_AtomRecordCollection_from_records(pdb_string):
+    records = [
+        AtomRecord.from_string(line) 
+        for line in pdb_string.splitlines() 
+        if line.startswith('ATOM')
     ]
-    assert parse_anarci_numbering(numbering) == [
-        {('1', ' '): 'A', ('2', ' '): 'L', ('107', ' '): 'R'},
-        {('1', ' '): 'R', ('2', ' '): 'I', ('113', ' '): 'S'}
+    record_collection = AtomRecordCollection.from_records('1PDB', records)
+    assert len(record_collection.records) == 21
+    assert record_collection.name == '1PDB'
+
+def test_AtomRecordCollection_indexed_sequence(datadir):
+    atom_record_collection = AtomRecordCollection.from_file(datadir / 'pdb_str.txt')
+    assert atom_record_collection.indexed_sequence == [('B_215_', 'S'), ('B_216_', 'C'), ('C_1_', 'D')]
+
+def test_AtomRecordCollection_create_key():
+    assert AtomRecordCollection._create_key('A', 105, 'A') == 'A_105_A'
+    assert AtomRecordCollection._create_key('B', 32, '') == 'B_32_'
+    assert AtomRecordCollection._create_key('A', 1, '') == 'A_1_'
+    assert AtomRecordCollection._create_key('L', 250, 'C') == 'L_250_C'
+
+def test_AtomRecordCollection_write_to_pdb(tmp_path, pdb_string, datadir):
+    atom_record_collection = AtomRecordCollection.from_file(datadir / 'pdb_str.txt')
+    d = tmp_path / "sub"
+    d.mkdir()
+    p = d / "test.pdb"
+    atom_record_collection.write_to_pdb(p)
+    assert p.read_text().splitlines() == [
+        line for line in pdb_string.splitlines() 
+        if line.startswith('ATOM')
     ]
 
-def test_get_new_numbering(chain_seq_dict):
-    assert get_new_numbering(chain_seq_dict) == (
-        {'A': 'L', 'B': 'H'}, 
-        {'A': {
-            ('1', ' '): 'A', ('2', ' '): 'L', ('3', ' '): 'Q', ('4', ' '): 'L', ('5', ' '): 'T', 
-            ('6', ' '): 'Q', ('7', ' '): 'S', ('8', ' '): 'P', ('9', ' '): 'S', ('10', ' '): 'S', 
-            ('11', ' '): 'L', ('12', ' '): 'S', ('13', ' '): 'A', ('14', ' '): 'S', ('15', ' '): 'V', 
-            ('16', ' '): 'G', ('17', ' '): 'D', ('18', ' '): 'R', ('19', ' '): 'I', ('20', ' '): 'T', 
-            ('21', ' '): 'I', ('22', ' '): 'T', ('23', ' '): 'C', ('24', ' '): 'R', ('25', ' '): 'A', 
-            ('26', ' '): 'S', ('27', ' '): 'Q', ('28', ' '): 'G', ('29', ' '): 'V', ('30', ' '): 'T', 
-            ('31', ' '): 'S', ('32', ' '): 'A', ('33', ' '): 'L', ('34', ' '): 'A', ('35', ' '): 'W', 
-            ('36', ' '): 'Y', ('37', ' '): 'R', ('38', ' '): 'Q', ('39', ' '): 'K', ('40', ' '): 'P', 
-            ('41', ' '): 'G', ('42', ' '): 'S', ('43', ' '): 'P', ('44', ' '): 'P', ('45', ' '): 'Q', 
-            ('46', ' '): 'L', ('47', ' '): 'L', ('48', ' '): 'I', ('49', ' '): 'Y', ('50', ' '): 'D', 
-            ('51', ' '): 'A', ('52', ' '): 'S', ('53', ' '): 'S', ('54', ' '): 'L', ('55', ' '): 'E', 
-            ('56', ' '): 'S', ('57', ' '): 'G', ('58', ' '): 'V', ('59', ' '): 'P', ('60', ' '): 'S', 
-            ('61', ' '): 'R', ('62', ' '): 'F', ('63', ' '): 'S', ('64', ' '): 'G', ('65', ' '): 'S', 
-            ('66', ' '): 'G', ('67', ' '): 'S', ('68', ' '): 'G', ('69', ' '): 'T', ('70', ' '): 'E', 
-            ('71', ' '): 'F', ('72', ' '): 'T', ('73', ' '): 'L', ('74', ' '): 'T', ('75', ' '): 'I', 
-            ('76', ' '): 'S', ('77', ' '): 'T', ('78', ' '): 'L', ('79', ' '): 'R', ('80', ' '): 'P', 
-            ('81', ' '): 'E', ('82', ' '): 'D', ('83', ' '): 'F', ('84', ' '): 'A', ('85', ' '): 'T', 
-            ('86', ' '): 'Y', ('87', ' '): 'Y', ('88', ' '): 'C', ('89', ' '): 'Q', ('90', ' '): 'Q', 
-            ('91', ' '): 'L', ('92', ' '): 'H', ('93', ' '): 'F', ('94', ' '): 'Y', ('95', ' '): 'P', 
-            ('96', ' '): 'H', ('97', ' '): 'T', ('98', ' '): 'F', ('99', ' '): 'G', ('100', ' '): 'G', 
-            ('101', ' '): 'G', ('102', ' '): 'T', ('103', ' '): 'R', ('104', ' '): 'V', ('105', ' '): 'D', 
-            ('106', ' '): 'V', ('107', ' '): 'R'}, 
-        'B': {
-            ('1', ' '): 'R', ('2', ' '): 'I', ('3', ' '): 'T', ('4', ' '): 'L', ('5', ' '): 'K', 
-            ('6', ' '): 'E', ('7', ' '): 'S', ('8', ' '): 'G', ('9', ' '): 'P', ('10', ' '): 'P', 
-            ('11', ' '): 'L', ('12', ' '): 'V', ('13', ' '): 'K', ('14', ' '): 'P', ('15', ' '): 'T', 
-            ('16', ' '): 'Q', ('17', ' '): 'T', ('18', ' '): 'L', ('19', ' '): 'T', ('20', ' '): 'L', 
-            ('21', ' '): 'T', ('22', ' '): 'C', ('23', ' '): 'S', ('24', ' '): 'F', ('25', ' '): 'S', 
-            ('26', ' '): 'G', ('27', ' '): 'F', ('28', ' '): 'S', ('29', ' '): 'L', ('30', ' '): 'S', 
-            ('31', ' '): 'D', ('31', 'A'): 'F', ('31', 'B'): 'G', ('32', ' '): 'V', ('33', ' '): 'G', 
-            ('34', ' '): 'V', ('35', ' '): 'G', ('36', ' '): 'W', ('37', ' '): 'I', ('38', ' '): 'R', 
-            ('39', ' '): 'Q', ('40', ' '): 'P', ('41', ' '): 'P', ('42', ' '): 'G', ('43', ' '): 'K', 
-            ('44', ' '): 'A', ('45', ' '): 'L', ('46', ' '): 'E', ('47', ' '): 'W', ('48', ' '): 'L', 
-            ('49', ' '): 'A', ('50', ' '): 'I', ('51', ' '): 'I', ('52', ' '): 'Y', ('53', ' '): 'S', 
-            ('54', ' '): 'D', ('55', ' '): 'D', ('56', ' '): 'D', ('57', ' '): 'K', ('58', ' '): 'R', 
-            ('59', ' '): 'Y', ('60', ' '): 'S', ('61', ' '): 'P', ('62', ' '): 'S', ('63', ' '): 'L', 
-            ('64', ' '): 'N', ('65', ' '): 'T', ('66', ' '): 'R', ('67', ' '): 'L', ('68', ' '): 'T', 
-            ('69', ' '): 'I', ('70', ' '): 'T', ('71', ' '): 'K', ('72', ' '): 'D', ('73', ' '): 'T', 
-            ('74', ' '): 'S', ('75', ' '): 'K', ('76', ' '): 'N', ('77', ' '): 'Q', ('78', ' '): 'V', 
-            ('79', ' '): 'V', ('80', ' '): 'L', ('81', ' '): 'V', ('82', ' '): 'M', ('82', 'A'): 'T', 
-            ('82', 'B'): 'R', ('82', 'C'): 'V', ('83', ' '): 'S', ('84', ' '): 'P', ('85', ' '): 'V', 
-            ('86', ' '): 'D', ('87', ' '): 'T', ('88', ' '): 'A', ('89', ' '): 'T', ('90', ' '): 'Y', 
-            ('91', ' '): 'F', ('92', ' '): 'C', ('93', ' '): 'A', ('94', ' '): 'H', ('95', ' '): 'R', 
-            ('96', ' '): 'R', ('97', ' '): 'G', ('98', ' '): 'P', ('99', ' '): 'T', ('100', ' '): 'T', 
-            ('100', 'A'): 'L', ('100', 'B'): 'F', ('100', 'C'): 'G', ('100', 'D'): 'V', ('100', 'E'): 'P', 
-            ('100', 'F'): 'I', ('100', 'G'): 'A', ('100', 'H'): 'R', ('100', 'I'): 'G', ('100', 'J'): 'P', 
-            ('100', 'K'): 'V', ('100', 'L'): 'N', ('100', 'M'): 'A', ('100', 'N'): 'M', ('101', ' '): 'D', 
-            ('102', ' '): 'V', ('103', ' '): 'W', ('104', ' '): 'G', ('105', ' '): 'Q', ('106', ' '): 'G', 
-            ('107', ' '): 'I', ('108', ' '): 'T', ('109', ' '): 'V', ('110', ' '): 'T'}
-        })
-
-def test_chain2seq(chain_seq_dict):
-    assert chain_dict2seq(chain_seq_dict) == {
-        'A': 'ALQLTQSPSSLSASVGDRITITCRASQGVTSALAWYRQKPGSPPQLLIYDASSLESGVPSRFSGSGSGTEFTLTISTLRPEDFATYYCQQLHFYPHTFGGGTRVDVRRT',
-        'B': 'RITLKESGPPLVKPTQTLTLTCSFSGFSLSDFGVGVGWIRQPPGKALEWLAIIYSDDDKRYSPSLNTRLTITKDTSKNQVVLVMTRVSPVDTATYFCAHRRGPTTLFGVPIARGPVNAMDVWGQGITVT',
-        'C': 'DLDRWAS'
-    }
-
-def test_chain2num(chain_seq_dict):
-    assert chain_dict2num(chain_seq_dict) == {
-        'A': [
-            ('1', ' '), ('2', ' '), ('3', ' '), ('4', ' '), ('5', ' '), ('6', ' '), ('7', ' '), ('8', ' '), 
-            ('9', ' '), ('10', ' '), ('11', ' '), ('12', ' '), ('13', ' '), ('14', ' '), ('15', ' '), 
-            ('16', ' '), ('17', ' '), ('18', ' '), ('19', ' '), ('20', ' '), ('21', ' '), ('22', ' '), 
-            ('23', ' '), ('24', ' '), ('25', ' '), ('26', ' '), ('27', ' '), ('28', ' '), ('29', ' '), 
-            ('30', ' '), ('31', ' '), ('32', ' '), ('33', ' '), ('34', ' '), ('35', ' '), ('36', ' '), 
-            ('37', ' '), ('38', ' '), ('39', ' '), ('40', ' '), ('41', ' '), ('42', ' '), ('43', ' '), 
-            ('44', ' '), ('45', ' '), ('46', ' '), ('47', ' '), ('48', ' '), ('49', ' '), ('50', ' '), 
-            ('51', ' '), ('52', ' '), ('53', ' '), ('54', ' '), ('55', ' '), ('56', ' '), ('57', ' '), 
-            ('58', ' '), ('59', ' '), ('60', ' '), ('61', ' '), ('62', ' '), ('63', ' '), ('64', ' '), 
-            ('65', ' '), ('66', ' '), ('67', ' '), ('68', ' '), ('69', ' '), ('70', ' '), ('71', ' '), 
-            ('72', ' '), ('73', ' '), ('74', ' '), ('75', ' '), ('76', ' '), ('77', ' '), ('78', ' '), 
-            ('79', ' '), ('80', ' '), ('81', ' '), ('82', ' '), ('83', ' '), ('84', ' '), ('85', ' '), 
-            ('86', ' '), ('87', ' '), ('88', ' '), ('89', ' '), ('90', ' '), ('91', ' '), ('92', ' '), 
-            ('93', ' '), ('94', ' '), ('95', ' '), ('96', ' '), ('97', ' '), ('98', ' '), ('99', ' '), 
-            ('100', ' '), ('101', ' '), ('102', ' '), ('103', ' '), ('104', ' '), ('105', ' '), ('106', ' '), 
-            ('107', ' '), ('108', ' '), ('109', ' ')], 
-        'B': [
-            ('1', ' '), ('2', ' '), ('3', ' '), ('4', ' '), ('5', ' '), ('6', ' '), ('7', ' '), ('8', ' '), 
-            ('9', ' '), ('10', ' '), ('11', ' '), ('12', ' '), ('13', ' '), ('14', ' '), ('15', ' '), 
-            ('16', ' '), ('17', ' '), ('18', ' '), ('19', ' '), ('20', ' '), ('21', ' '), ('22', ' '), 
-            ('23', ' '), ('24', ' '), ('25', ' '), ('26', ' '), ('27', ' '), ('28', ' '), ('29', ' '), 
-            ('30', ' '), ('31', ' '), ('32', ' '), ('33', ' '), ('34', ' '), ('35', ' '), ('35', 'A'), 
-            ('35', 'B'), ('36', ' '), ('37', ' '), ('38', ' '), ('39', ' '), ('40', ' '), ('41', ' '), 
-            ('42', ' '), ('43', ' '), ('44', ' '), ('45', ' '), ('46', ' '), ('47', ' '), ('48', ' '), 
-            ('49', ' '), ('50', ' '), ('51', ' '), ('52', ' '), ('53', ' '), ('54', ' '), ('55', ' '), 
-            ('56', ' '), ('57', ' '), ('58', ' '), ('59', ' '), ('60', ' '), ('61', ' '), ('62', ' '), 
-            ('63', ' '), ('64', ' '), ('65', ' '), ('66', ' '), ('67', ' '), ('68', ' '), ('69', ' '), 
-            ('70', ' '), ('71', ' '), ('72', ' '), ('73', ' '), ('74', ' '), ('75', ' '), ('76', ' '), 
-            ('77', ' '), ('78', ' '), ('79', ' '), ('80', ' '), ('81', ' '), ('82', ' '), ('82', 'A'), 
-            ('82', 'B'), ('82', 'C'), ('83', ' '), ('84', ' '), ('85', ' '), ('86', ' '), ('87', ' '), 
-            ('88', ' '), ('89', ' '), ('90', ' '), ('91', ' '), ('92', ' '), ('93', ' '), ('94', ' '), 
-            ('95', ' '), ('96', ' '), ('97', ' '), ('98', ' '), ('99', ' '), ('100', ' '), ('100', 'A'), 
-            ('100', 'B'), ('100', 'C'), ('100', 'D'), ('100', 'E'), ('100', 'F'), ('100', 'G'), 
-            ('100', 'H'), ('100', 'I'), ('100', 'J'), ('100', 'K'), ('100', 'L'), ('100', 'M'), 
-            ('100', 'N'), ('101', ' '), ('102', ' '), ('103', ' '), ('104', ' '), ('105', ' '), 
-            ('106', ' '), ('107', ' '), ('108', ' '), ('109', ' '), ('110', ' ')], 
-        'C': [
-            ('1', ' '), ('2', ' '), ('3', ' '), ('4', ' '), ('5', ' '), ('6', ' '), ('7', ' ')]}
-
-def test_locate_vdomain():
-    ...
