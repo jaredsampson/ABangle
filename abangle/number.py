@@ -1,261 +1,170 @@
-"""Module contains logic for locating and renumbering Fv chains in PDB files"""
-
-import argparse
 import pathlib
-import re
-from collections import defaultdict, namedtuple
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TextIO
+import argparse
+from typing import *
 from anarci import anarci
-from dataclasses import dataclass
+from fastcore.basics import Str
+from fastcore.xtras import dict2obj
 
-aa_codes_3to1 = {
-        'ARG': 'R','HIS': 'H','LYS': 'K','ASP': 'D','GLU': 'E','SER': 'S', 'THR': 'T','ASN': 'N','GLN': 'Q','CYS': 'C',
-        'GLY': 'G','PRO': 'P','ALA': 'A','VAL': 'V','ILE': 'I','LEU': 'L','MET': 'M','PHE': 'F','TYR': 'Y','TRP': 'W'
-    }
+from Bio.PDB.PDBParser import PDBParser
+from Bio.PDB.PDBIO import PDBIO, Select
+from Bio.PDB.Entity import Entity
+from Bio.PDB.Structure import Structure
+from Bio.PDB.Chain import Chain
+from Bio.SeqRecord import SeqRecord
+from Bio import SeqIO
 
-@dataclass
-class AtomRecord:
-    """Class for accessing, setting and formatting atom records in a pdb file."""
-    atom: str
-    atom_serial_number: str
-    atom_name: str
-    alternate_location_indicator: str
-    residue_name: str
-    chain_identifier: str
-    residue_sequence_number: str
-    insertion_code: str
-    x_coordinate: str
-    y_coordinate: str
-    z_coordinate: str
-    occupancy: str
-    temperature_factor: str
-    element_symbol: str
-    charge: str
+def get_structure(path: pathlib.Path) -> Structure:
+    """Parses PDB file, returns a structure object.
 
-    def reset_attribute(self, attr: str, replacement: Any) -> None:
-        """Method allows you to edit the attributes of an atom corresponding to a single line in a pdb file.
+    Args:
+        data_path (pathlib.Path): Path to data
+    """
+    if not isinstance(path, pathlib.Path):
+        path = pathlib.Path(path)
 
-        Args:
-            attr (str): The attribute to be edited. 
-            replacement (Any): The replacement value.
-        """
-        assert attr in self.__dict__.keys(), 'Attribute could not be found'
-        correct_type = type(getattr(self, attr))
-        if not isinstance(replacement, correct_type):
-            try:
-                replacement = correct_type(replacement)
-            except ValueError:
-                raise ValueError(f'Could not cast {attr} to {correct_type}')
-        setattr(self, attr, replacement)
-        
-    @property
-    def pdb_formatted_string(self) -> str:
-        """Method for correctly formatting the attributes of an atom record for writing to a pdb file.
+    parser = PDBParser(PERMISSIVE=True, QUIET=True)
+    return parser.get_structure(path.stem, path)
 
-        Returns:
-            str: A string representation of an atom that conforms to the pdb file format guide found
-            here http://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM. 
-        """
-        return "{:6s}{:5d}  {:<3s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}\n".format(*self.__dict__.values()) #Code borrowed from https://cupnet.net/pdb-format/
-
-    @classmethod
-    def from_string(cls, raw: str) -> None:
-        """Method for constructing an AtomRecord object from a line in a pdb file.
-        Can be used in list comp i.e. '[AtomRecord.from_string(line) for line in pdb_file_handle.readlines()].
-
-        Args:
-            raw (str): A raw string representing one line in a pdb file.
-
-        Returns:
-            AtomRecord: An AtomRecord object.
-        """
-
-        assert raw.startswith('ATOM'), 'Line does not describe an atom'
-        
-        indices = {
-            'atom': (0,6),
-            'atom_serial_number': (6,11),
-            'atom_name': (12,16),
-            'alternate_location_indicator': (16,17),
-            'residue_name': (17,20),
-            'chain_identifier': (21,22),
-            'residue_sequence_number': (22,26),
-            'insertion_code': (26,27),
-            'x_coordinate': (30,38),
-            'y_coordinate': (38,46),
-            'z_coordinate': (46,54),
-            'occupancy': (54,60),
-            'temperature_factor': (60,66),
-            'element_symbol': (76,78),
-            'charge': (78,80)
+def get_structure_sequences(structure: Structure) -> Dict[str, SeqRecord]:
+    """Gets the sequences of each chain as a list of SeqRecord objects 
+    """
+    return {
+        seq.id[-1]: seq # 1U8L:A[-1] -> A
+        for seq in SeqIO.PdbIO.AtomIterator(
+            structure.id, structure=structure)
         }
 
-        attrib_types = (
-            str, int, str, str, str, str, int, str, float, float, float, float, float, str, str
-        )
-        
-        return cls(**{
-            key: new_type(raw[slice(*ind)].strip()) 
-            for (key, ind), new_type in zip(indices.items(), attrib_types)
-        })
+def parse_chain_type(details: Dict[str, Any]) -> str:
+    """Takes a one letter chain identifier and converts it to either H, L or raises error
 
-class AtomRecordCollection:
-    """Container for AtomRecord instances that allows convenient editing of multiple records simultaneously."""
-    def __init__(self, name: str, records: List[AtomRecord]) -> None:
-        self.name = name
-        self.records = records
+    Args:
+        details (Dict): A dictionary containing details of the antibody alignment, chain
+        type will be either H (heavy), L (lambda) or K (kappa). Abangle expects H (heavy)
+        and L (light) chain identifiers, so function will convert L or K -> L     
 
-    def write_to_pdb(self, path: pathlib.Path) -> None:
-        """Method for writing atom records to a pdb file with correct formatting.
+    Returns:
+        str: A chain identifier 
+    """
+    chain_type = details['chain_type']
+    if chain_type in ('L', 'K'):
+        return 'L'
+    elif chain_type == 'H':
+        return 'H'
+    else:
+        raise ValueError(f'chain type {chain_type}')
 
-        Args:
-            path (pathlib.Path): Output file path.
-        """
+def get_gap_position_ids(numbering: Dict[str, Dict[str, Any]]) -> List:
+    return [res_id[:3] for res_id in list(numbering['L'].numbering) if res_id[-1] == '-']
 
-        with open(path, 'w') as f:
-            for atom in self.records:
-                f.write(atom.pdb_formatted_string)
-
-    def _get_new_numbering(self) -> Tuple:
-        """Method generates new numbering for antibody Fv chains based on the chothia numbering scheme. 
-        Info on numbering can be found at https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6198058/.
-
-        Raises:
-            NotImplementedError: Raised if anarci failed to find H and L Fv chains.
-
-        Returns:
-            Tuple: (
-                keys: Dictionary mapping concatenated chain, number, insertion code to residue (e.g. {'A_1_': 'T', ..., 'A_100_B': 'Y', ...}),
-                numbering: Nested data structure containing number mapped to residue (e.g. [((1, ' '), 'T'), ..., ((100, 'B'), 'Y'), ...]),
-                details: List of dictionaries containing details of the alignment e.g. start and end index of the chain in the query sequence, chain identifier etc
-            )
-        """
-        keys, residues = list(zip(*self.indexed_sequence))
-        sequence = ''.join(residues)
-        numbering, details, _ = anarci([(self.name, sequence)], scheme = 'chothia')
-        details, numbering = details[0], numbering[0] 
-        if not any(numbering):
-            raise NotImplementedError('Chains could not be renumbered')
-        assert len(numbering) == 2, 'Only one chain could be renumbered'
-        return keys, numbering, details
-
-    def _map_old_to_new_numbering(self) -> Dict:
-        """Method provides a dictionary to ensure new numbering is correctly applied to the appropriate AtomRecord. 
-        A unique key is generated for each residue containing its chain, number and insertion code. 
-        The start and end indices of the Fv chains are used to subset these keys and align them with the new numbering. 
-        The resulting dictionary can be used to look up the correct new number for each atom.
-
-        Raises:
-            ValueError: Raised if chain is not a recognised antibody chain.
-
-        Returns:
-            Dict: Dictionary mapping concatenated chain, number, insertion code to residue (e.g. {'A_1_': 'T', ..., 'A_100_B': 'Y', ...}).
-        """
-        old_keys, numbering, details = self._get_new_numbering()
-        key_map = []
-        for num, det in zip(numbering, details):
-            num = num[0]
-            
-            if det['chain_type'] in ('K', 'L', 'H'):
-                chain = 'L' if det['chain_type'] in ('K', 'L') else 'H' 
-            else:
-                raise ValueError('Chain type not recognized')
-            
-            new_keys = [
-                self._create_key(chain, str(n[0][0]), n[0][1]).strip()
-                for n in num 
-                if not n[1] == '-'
-            ]
-            key_map.extend(list(zip(old_keys[det['query_start']: det['query_end']], new_keys)))
-        
-        return dict(key_map)
-
-
-    def renumber_residues(self) -> None:
-        """Iterates through AtomRecord object and creates unique residue key. Key is then used to look up the.
-        new chain id, number and insertion code in new numbering scheme. New numbering is applied and records.
-        not in the Fv are dripped.
-        """
-        key_mapping = self._map_old_to_new_numbering()
-        for atom in self.records:
-            key = self._create_key(atom.chain_identifier, atom.residue_sequence_number, atom.insertion_code)
-            
-            if key in key_mapping:
-                chain, number, insertion_code = key_mapping[key].split('_')
-                replacement_attrs = zip(
-                    ['chain_identifier', 'residue_sequence_number', 'insertion_code'], 
-                    [chain, number, insertion_code]
-                )
-                
-                for attr, replacement in replacement_attrs:
-                    atom.reset_attribute(attr, replacement)
-        
-        self.records = [atom for atom in self.records if atom.chain_identifier in ('H', 'L')]
-
-    @property
-    def indexed_sequence(self) -> List[Tuple]:
-        """Method iterates through alpha carbon records to create mapping between residue key: residue e.g. [..., ('A_100_A', 'G'), ('A_100_B', 'H')].
-
-        Returns:
-            List[Tuple]: List of residues mapped to their unique residue key.
-        """
-
-        return [
-            (self._create_key(atom.chain_identifier, atom.residue_sequence_number, atom.insertion_code), aa_codes_3to1[atom.residue_name])
-            for atom in self.records
-            if atom.atom_name == 'CA' # only use alpha carbon
-        ]
-
-    @classmethod
-    def from_file(cls, path: pathlib.Path) -> None:
-        """Class method for reading in a collection of AtomRecords from a pdb file path and returning an AtomRecordCollection instance.
-
-        Args:
-            path (pathlib.Path): Path to pdb file e.g. 'data/pdb_files/1U8L.pdb'.
-
-        Returns:
-            AtomRecordCollection.
-        """
-        
-        if not isinstance(path, pathlib.Path):
-            path = pathlib.Path(path)
-
-        return cls(
-            path.stem, [
-            AtomRecord.from_string(line) 
-            for line in path.read_text().splitlines() 
-            if line.startswith('ATOM')
-        ])
+def detach_children(entity: Entity, children: Sequence):
+    for child in children: entity.detach_child(child)
     
-    @classmethod
-    def from_records(cls, name: str, records: List[AtomRecord]) -> None:
-        """Class method for creating an AtomRecordCollection instance from a list of AtomRecords.
+def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -> Dict[str, Dict[str, Any]]:
+    """Takes a list of chain: sequence mappings and aligns the sequences to get their chain identifer and numbering
+    The numbering is then returned as a dictionary mapping query chain name to Fv chain, span and
 
-        Args:
-            name (str): Name of the structure the AtomRecords belong to.
-            records (List[AtomRecord]): A list of AtomRecord instances belonging to a single pdb structure.
+    Args:
+        sequences (Dict[str, SeqRecord]): 
+        scheme (str, optional): Numbering scheme to use. Can be one of: imgt, chothia, kabat or martin. Defaults to 'chothia'. 
 
-        Returns:
-            AtomRecordCollection.
-        """
-        return cls(name, records)
-
-    @staticmethod
-    def _create_key(chain: str, number: int, insertion_code: str) -> str:
-        """Method for creating a key for each AtomRecord that can be used to look up the correct number when renumbering Fv chains.
-
-        Args:
-            chain (str): Chain identifier e.g. 'A'.
-            number (int): Residue number e.g. 100.
-            insertion_code (str): e.g. 'B' or ''.
-
-        Returns:
-            str: Unique residue key e.g. 'A_100_B'.
-        """
-        return '_'.join([chain, str(number), insertion_code])
+    Returns:
+        Dict[str, Dict[str, Any]]: e.g. {'A': {'Chain': 'H', 'span': slice(0, 107, None), numbering: (' ', 1', ' ', 'T)}}
+    """
+    input = [
+        (chain, str(seq_record.seq)) 
+        for chain, seq_record in sequences.items()
+    ]
     
-    def __repr__(self) -> str:
-        return f'{len(self.records)} records from structure {self.name}'
+    numbering, details, _ = anarci(input, scheme = scheme)
+    
+    numbering = [
+        [(' ', res_id[0][0], res_id[0][1]) for res_id in num[0][0]
+        if res_id[1] != '-']
+        for num in numbering 
+        if num
+    ]
+    
+    details = dict2obj([det[0] for num, det in zip(numbering, details) if num]) # details wrapped in list
 
+    return dict2obj({
+        det.query_name: 
+        {'chain': parse_chain_type(det),'span': slice(det.query_start, det.query_end), 'numbering': num}
+        for num, det in zip(numbering, details)
+    })
+
+def contains_single_model(structure: Structure) -> bool:
+    return len(structure.get_list()) == 1
+
+def new_numbering_ends_on_higher_reseqid(old2new: Tuple) -> bool:
+    return old2new[-1][0][1] < old2new[-1][1][1]
+
+def renumber_structure(structure: Structure, numbering: Dict) -> None:
+    """Takes a numbering dictionary and a structure and updates the residue IDs with the new numbering 
+
+    Args:
+        structure (Structure): 
+        numbering (Dict):
+    """
+    assert contains_single_model(structure), 'Structure contains more than one model'
+    
+    for name, numbering in numbering.items():
+        res_ids = [res.id for res in structure[0][name].get_residues()]
+        fv_res_ids = res_ids[numbering.span]
+        non_fv_res_ids = set(res_ids) - set(fv_res_ids)
+        detach_children(structure[0][name], non_fv_res_ids) # kicks out residues that are not part of the Fv
+        old2new = list(zip(fv_res_ids, numbering.numbering))
+
+        if new_numbering_ends_on_higher_reseqid(old2new):
+            old2new = reversed(old2new) # prevents residue id assignment clashing with existing residue id 
+        
+        for old, new in old2new: 
+            structure[0][name][old].id = new
+        
+        structure[0][name].id = numbering.chain
+
+class FvSelect(Select):
+    """Sublassess Select so that only residues in the Fv will be written to disk
+
+    Args:
+        Select ([type]): [description]
+    """
+    def accept_residue(self, residue):
+        
+        hetcode, seqid, icode = residue.id
+        chain = residue.parent.id
+        
+        if chain == 'H' and seqid in range(113):
+            return True
+        elif chain == 'L' and seqid in range(107):
+            return True
+        else:
+            return False
+
+def write_pdb(path: str, structure: Structure) -> None:
+    """Writes the Fv portion of a pdb to disk
+    """
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(path, select=FvSelect())
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Renumber the Fv portion of a pdb file')
+    parser.add_argument('infiles', nargs='+', type=str, help='Input file')
+    parser.add_argument('outdir', type=str, help='Output directory')
+    parser.add_argument('scheme', type=str, help='Numbering scheme')
+    args = parser.parse_args(argv)
+    outdir = pathlib.Path(args.outdir)
+
+    for pdb in args.infiles:
+        path = pathlib.Path(pdb)
+        structure = get_structure(path)
+        sequences = get_structure_sequences(structure)
+        numbering = number_sequences(sequences, scheme = args.scheme)
+        renumber_structure(structure, numbering)
+
+        outpath = (outdir/f'{path.stem}_{args.scheme}_Fv').with_suffix('.pdb')
+        write_pdb(str(outpath), structure)
+        
 if __name__ == '__main__':
-    pass
+    exit(main())
+    
