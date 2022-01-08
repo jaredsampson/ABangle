@@ -38,401 +38,14 @@ from dataclasses import dataclass
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
 
-try:
-    savedpath = open(os.path.join(path, "config/userdatapath.txt")).readline().strip()
-    if savedpath and not os.path.exists(savedpath):
-        raise IOError
-    else:
-        user_datapath = savedpath
-except IOError:
-    savedpath = ""
-    user_datapath = ""
-
-# Get the path to the antibody numbering program. (It may also be 'online' if the user has set this as default in the set up)
-try:
-    AnnotationProgPath = (
-        open(os.path.join(path, "config/AnnotationProgPath.txt")).readline().strip()
-    )
-except IOError:
-    AnnotationProgPath = ""
-
 # Read in known sequences
 Sequences, Residues = dataIO.load(
     os.path.join(data_path, "Sequences.dat"), header=True, rownames=0, conv=False
 )
 
-class PDB:
-    """A class to describe PDB files. Parses the file and locates Fv regions.
-    Should handle any structure with VH and VL regions in different chains. Use the scfv option to tell abnum to look for VH and VL regions on the same chain.
-    Multiple models in the same file will also be handled. Note that abangle was developed using X-ray xtal structures only"""
-
-    distance_cutoff = 20 # angstrom threshold for pairing heavy and light chains
-
-    def __init__(self, name, filepath, args, verbose = False, usernumbered = True):
-        self.name = name
-        self.filepath = filepath
-        self.args = args
-        self.parser = PDBParser(PERMISSIVE=1)
-        self.verbose = verbose
-        self.usernumbered = usernumbered
-        self.parse_pdb()  # Get Chain objects
-        self.pair_chains()  # Pair the VH and VL chains using distance constraint
-
-    def read_pdb(self):
-        pdb_path = pathlib.Path(self.filepath)
-        assert pdb_path.exists(), 'Could not find file, check the path is correct'
-        return pdb_path.read_text().splitlines()
-        
-    def parse_pdb(self):
-        # pdb_fo = io.StringIO(self.read_pdb())
-        # pdb_lines = self.read_pdb()
-        with open(self.filepath) as f:
-            pdb_lines = f.readlines()
-        
-        model = ''
-        chainlines = {}
-        for line in pdb_lines:
-            if line.startswith("MODEL"):
-				# If we find a model id then use it for the following lines
-                model = line.split()[1]
-            elif line.startswith("ATOM"): # or line.startswith("HETATM"):
-                c = line[21]
-                try:
-                    chainlines[ (model, c ) ].append( line )
-                except:
-                    chainlines[ (model, c ) ] = [ line ]
-
-        # Create Chain objects for each chain in the file
-        if self.verbose:
-            if self.usernumbered:
-                # Parse the PDB to get the correct annotation.
-                sys.stdout.write(
-                    f"Using the annotation of chain H and chain L in file {self.filepath}...\n"
-                )
-            elif self.args.online or AnnotationProgPath == "Use online":
-                sys.stdout.write("Annotating using online server...\n")
-            elif AnnotationProgPath:
-                sys.stdout.write(
-                    f"Annotating using {os.path.split(AnnotationProgPath)[1]} ...\n" 
-                )
-
-        self.Chains = {
-            chain: Chain(chainlines[chain], chain, self.args) for chain in chainlines
-        }
-        self.ABchains = [
-            chain for chain in self.Chains if self.Chains[chain].type in ["H", "L"]
-        ]
-
-        # TODO test with pdb in scfv format (both H and L are in single chain) with http://opig.stats.ox.ac.uk/webapps/newsabdab/sabdab/structureviewer/?pdb=6lfm
-        # If the user has provided a chain id for a single chain fv then create a new chain object with the unannotated atoms
-        if self.args.scfv and self.ABchains:
-            if self.verbose:
-                sys.stdout.write("Attempting split of scfv into VH and VL...\n")
-            self.ScFv = {}
-            for chain in self.Chains:
-                if chain[1] in self.args.scfv:
-                    self.ScFv[(chain[0], chain[1], 1)] = self.Chains[chain]
-                    if self.verbose:
-                        sys.stdout.write(
-                            f"""Found model {self.Chains[chain].model} chain {self.Chains[chain].ident} V{self.Chains[chain].type} region.\n"""
-                        )
-                    # Annotate the remainder of the structure
-                    self.ScFv[(chain[0], chain[1], 2)] = Chain(
-                        self.Chains[chain].unannotated, chain, self.args
-                    )
-                    if self.ScFv[(chain[0], chain[1], 2)].type == "Antigen":
-                        if self.verbose:
-                            sys.stderr.write(
-                                "Warning: Abnum failed to find V%s of your scFv %s chain %s\n"
-                                % (
-                                    ["H", "L"][
-                                        int(
-                                            not ["H", "L"].index(
-                                                self.Chains[chain].type
-                                            )
-                                        )
-                                    ],
-                                    chain[0],
-                                    chain[1],
-                                )
-                            )
-                        del self.ScFv[(chain[0], chain[1], 1)]
-                        del self.ScFv[(chain[0], chain[1], 2)]
-                    elif self.verbose:
-                        sys.stdout.write(
-                            f"""Found model {self.ScFv[(chain[0], chain[1], 2)].model} chain {self.ScFv[(chain[0], chain[1], 2)].ident} V{self.ScFv[(chain[0], chain[1], 2)].type} region.\n"""
-                        )
-            self.Chains.update(self.ScFv)
-            # Remove duplicates from the Chains dictionary
-            for chain in self.ScFv:
-                if (chain[0], chain[1]) in self.Chains:
-                    del self.Chains[(chain[0], chain[1])]
-
-        if self.verbose and self.ABchains:
-            sys.stdout.write("Done...\n")
-
-    def pair_chains(self):
-        # Pair chains within the models found in the PDB file.
-        # Use distance constraint between two highly conserved interface residues
-        if self.verbose and self.ABchains:
-            sys.stdout.write("Paring VH and VL...\n")
-        Models = {}
-        for chain in self.Chains:
-            if self.Chains[chain].type in ["H", "L"]:
-                try:
-                    Models[chain[0]].append(chain)
-                except KeyError:
-                    Models[chain[0]] = [chain]
-
-        # TODO implement function to compute distance between two chains
-        self.Fvs = []
-        for model in Models:
-            for comb in itertools.combinations(Models[model], 2):
-                if self.Chains[comb[0]].type == self.Chains[comb[1]].type:
-                    continue
-                # Use a distance cutoff of 20 Angstroms between two conserved interface atoms in order to pair domains.
-                elif (
-                    numpy.linalg.norm(
-                        numpy.array(self.Chains[comb[0]].point)
-                        - numpy.array(self.Chains[comb[1]].point)
-                    )
-                    < 20.0
-                ):
-                    self.Fvs.append(
-                        Fv(self.Chains[comb[0]], self.Chains[comb[1]], self.name)
-                    )
-        if not self.Fvs:
-            if self.ABchains:
-                unpaired_chains = self.filepath, ", ".join([f'{c[1]} (V{self.Chains[c].type})' for c in self.ABchains])
-                
-                raise Exception(
-                    f"""Could not locate Fvs in {self.filepath}
-                    Unpaired antibody chains were found: {unpaired_chains}
-                    These are either of all the same type (VH or VL) or do not meet the distance constraint.
-                    Please use the scfv option for single chain fvs.\n"""
-                )
-            else:
-                raise Exception(
-                    f"""No antibody chains found in {self.filepath}.\n
-                    check that heavy and light chains have chain identifiers H and L respectively.\n"""
-                )
-
-class Chain:
-    """A class to describe a chain in a pdb file.
-    Antibody numbering will be applied to each chain in the file. If it succeeds the coordinates will be annotated with chothia numbering."""
-
-    def __init__(self, lines, cid, args):
-        self.lines = lines
-        self.model = cid[0]
-        self.ident = cid[1]
-        self.args = args
-        self.annotate()
-
-    def annotate(self):
-
-        # Convert pdb lines to pir format. Returns the file handle.
-        pirfile, Sequence, ResID = pdb2pir(self.lines)
-
-        if len(Sequence) <= 2000:
-            # Number using abnum either locally or online. OR let the user tell us that it is already chothia numbered.
-            # The executable at AnnotationProgPath should take as input a .pir file and give the same format output as the abnum server to stdout.
-            # Errors should go to stderr and the executable should be quiet if it cannot number the sequence given. i.e return '' to both stdout and stderr.
-            # Only tested with Abysis
-            if self.args.usernumbered:
-                # Parse the PDB to get the correct annotation.
-                ABnumOut = UserAnnotation(Sequence, ResID, self.ident)
-            elif self.args.online or AnnotationProgPath == "Use online":
-                ABnumOut = OnlineAnnotation(Sequence)
-            elif AnnotationProgPath:
-                subpr = subprocess.Popen(
-                    [AnnotationProgPath, pirfile, "-c"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                ABnumOut = subpr.communicate()
-            else:
-                raise Exception(
-                    "No numbering option specified and no numbering program found"
-                )
-        else:
-            ABnumOut = [False, False]
-
-        os.remove(pirfile)
-
-        if ABnumOut[1]:
-            raise Exception(ABnumOut[1])
-
-        # Abnum is quiet if it fails - we assume this is a non-antibody chain - call it an antigen - but does not necesserily mean that it is!
-        # Antigens are not defined in this way
-        if not ABnumOut[0]:
-            self.type = "Antigen"
-            self.AGlines = self.lines
-        else:
-            ######################
-            # Parse ABnum output #
-            ######################
-            try:
-                Annotation = [
-                    res
-                    for res in map(str.split, ABnumOut[0].strip().split("\n"))
-                    if res[1] != "-"
-                ]
-            except IndexError:
-                raise Exception(
-                    "Annotation failed. Unexpected annotation file format. Starts with: %s "
-                    % ABnumOut[0][:50]
-                )
-
-            # Match the start of the Annotated sequence to the input sequence. Abnum leaves out insertions at the start of the sequence.
-            # Map the annotation to the ResID. dictionary with residue id as key, annotation as values
-            mapping, self.sequence = AlignSequence(Annotation, Sequence, ResID)
-
-            # Assign the chain type: H, L
-            self.type = Annotation[0][0][0]
-
-            # Annotate the PDBfile with chothia numbering. Heavy and Light chain types will be labelled as H and L respectively
-            self.FVATOMS, self.unannotated = [], []
-            for line in self.lines:
-                rid = line[22:27].strip()
-                if rid in mapping:
-                    try:
-                        self.FVATOMS.append(
-                            line[:21]
-                            + self.type
-                            + ("%d" % int(mapping[rid][1:])).rjust(4)
-                            + " "
-                            + line[27:]
-                        )
-                    except ValueError:
-                        # If you have insertion ( e.g. H97A )
-                        self.FVATOMS.append(
-                            line[:21]
-                            + self.type
-                            + mapping[rid][1:-1].rjust(4)
-                            + mapping[rid][-1]
-                            + line[27:]
-                        )
-                # If we have started to find FVATOMS then add the rest to unannotated - important for scFvs
-                else:  # if self.FVATOMS:
-                    self.unannotated.append(line)
-            # Extract an interface ca atom for pairing calculations.
-            if self.type == "H":
-                self.point = [
-                    list(map(float, [l[30:38], l[38:46], l[46:54]]))
-                    for l in self.FVATOMS
-                    if l.split()[2] + self.type + l[22:27].strip() == "CAH37"
-                ][0]
-            elif self.type == "L":
-                self.point = [
-                    list(map(float, [l[30:38], l[38:46], l[46:54]]))
-                    for l in self.FVATOMS
-                    if l.split()[2] + self.type + l[22:27].strip() == "CAL87"
-                ][0]
-
-
-class Fv:
-    """A class to compile chains which have been paired to form an Fv region"""
-
-    def __init__(self, c1, c2, PDBname):
-        self.c1 = c1
-        self.c2 = c2
-        self.sequence = {}
-        self.sequence.update(c1.sequence)
-        self.sequence.update(c2.sequence)
-        self.GetName(PDBname)
-        self.CompileLines()
-
-    def GetName(self, PDBname):
-        if self.c1.type == "H" and self.c2.type == "L":
-            self.name = PDBname + "_" + self.c1.ident + self.c2.ident
-            self.chains = {"H": self.c1, "L": self.c2}
-        elif self.c1.type == "L" and self.c2.type == "H":
-            self.name = PDBname + "_" + self.c2.ident + self.c1.ident
-            self.chains = {"L": self.c1, "H": self.c2}
-        else:
-            raise Exception("Pairing of non-AB chains as an Fv")
-
-        if self.c1.model:
-            self.name += "_m%s" % self.c1.model
-
-    def CompileLines(self):
-        self.Lines = self.chains["H"].FVATOMS + self.chains["L"].FVATOMS
-
-
-########################
-# Annotation functions #
-########################
-
-
-def UserAnnotation(Sequence, ResID, ident):
-    """The user gives a PDB containing an Fv region. It must be chothia numbered and be labelled with either H or L as the chain identifier"""
-    annotation = ""
-    if ident in ["H", "L"]:
-        for i in range(len(Sequence)):
-            annotation += ident + ResID[i] + " " + Sequence[i] + "\n"
-    return annotation, ""
-
-
-def OnlineAnnotation(sequence):
-    """Use the public Abnum server for annotation.
-    Note that this uses an PUBLIC webserver - this will only be done if the user requests it or explicitly sets it as their default method"""
-
-    Url = (
-        "http://www.bioinf.org.uk/cgi-bin/abnum/abnum.pl?plain=1&aaseq=%s&scheme=-c"
-        % ("".join(sequence))
-    )  # chothia numbering input
-    Annfd, Annfile = tempfile.mkstemp(".dat", "annot")
-    try:
-        urllib.request.urlretrieve(Url, Annfile)
-    except IOError:
-        raise Exception(
-            "Online annotation failed. Unable to access %s. Please check you have working internet connection and the ABnum server is functioning.\n"
-            % Url
-        )
-
-    f = os.fdopen(Annfd, "r")
-    annotation = f.read()
-    f.close()
-    if annotation == "\n":  # It failed
-        annotation = ""
-    os.remove(Annfile)
-    return annotation, ""
-
-
-def AlignSequence(annotated, target, resid):
-    """Align the annotated sequence we get out of the annotation method and the sequence it was given. Needed so just in case there is a duff output from the annotation program."""
-    n = len(annotated)
-    N = len(target)
-    tstore = "".join(target)
-    MaxCut = N - n
-    cut = 0
-    while 1:
-        aligned = True
-        for i in range(n):
-            if annotated[i][1] != target[i]:
-                aligned = False
-                target = target[1:]
-                resid = resid[1:]
-                cut += 1
-                break
-        if aligned:
-            break
-        if cut > MaxCut:
-            raise Exception(
-                "Could not align annotated sequence and sequence from PDB\n%s\n%s\n"
-                % ("".join([annotated[i][1] for i in range(n)]), tstore)
-            )
-    mapping = dict((resid[i], annotated[i][0]) for i in range(n))
-    sequence = dict((annotated[i][0], annotated[i][1]) for i in range(n))
-    return mapping, sequence
-
-def timeout(signum, frame):
-    raise OSError
-
 #########################
 # Calculation functions #
 #########################
-
 
 def create_coreset(fname):
     """Parses the file so that it only contains the coreset residues in each domain"""
@@ -562,7 +175,6 @@ def align(file1, file2):
         raise Exception(
             "TMalign alignment file not in an expected format, check output gives rotation matrix (or with -m option )\n"
         )
-
 
 def transform(coords, u):
     """Transforms coords by a matrix u. u is found using tmalign"""
@@ -774,23 +386,11 @@ def GetAngles(args):
     except Exception as exe:
         raise Exception("Angle calculation failed: " + str(exe) + "\n")
 
-@dataclass
-class GetAnglesargs:
-    """class to simulate the arguments the GetAngles function would receive were it being called from the command line
-    used in testing module output against benchmarks"""
-    i: str 
-    name: str
-    scfv: List = None
-    store: str = 'n'
-    q: bool = True
-    usernumbered: bool = True
-
 def validate_angles(file, HC2, HC1, LC2, LC1, dc, HL, rel_tol=1e-2):
     name = file[:4]
     angle_keys = ['HC2', 'HC1', 'LC2', 'LC1', 'dc', 'HL']
     true_angles = [HC2, HC1, LC2, LC1, dc, HL]
-    args = GetAnglesargs(examples/file, name)
-    new_angles = GetAngles(args)[f'{name}_HL']
+    new_angles = angles(examples/file)
     assert all([math.isclose(new_angles[key], angle, rel_tol=rel_tol) for key, angle in zip(angle_keys, true_angles)])
 
 if __name__ == '__main__':
@@ -798,10 +398,10 @@ if __name__ == '__main__':
     examples = data_path.parent/'data'/'example_pdbs'
 
     angles_4KQ3 = {'HC2':114.97, 'HC1':71.58, 'LC2':83.15, 'LC1':119.49, 'dc':16.00, 'HL':-61.10}
-    validate_angles('4KQ3_Fv.pdb', **angles_4KQ3)
+    validate_angles('4kq3_chothia_Fv.pdb', **angles_4KQ3)
 
     angles_2ATK = {'HL': -54.09, 'HC1': 70.76, 'HC2': 114.09, 'LC1': 123.29, 'LC2': 83.42, 'dc': 16.48}
-    validate_angles('2ATK_Fv.pdb', **angles_2ATK)
+    validate_angles('2atk_chothia_Fv.pdb', **angles_2ATK)
 
     angles_1U8L = {'HL': -56.41, 'HC1': 68.73, 'HC2': 118.87, 'LC1': 123.11, 'LC2': 82.99, 'dc': 15.88}
-    validate_angles('1U8L_Fv.pdb', **angles_1U8L)
+    validate_angles('1u8l_chothia_Fv.pdb', **angles_1U8L)
