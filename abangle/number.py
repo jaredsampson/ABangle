@@ -61,8 +61,8 @@ def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -
         Dict[str, Dict[str, Any]]: e.g. {'A': {'Chain': 'H', 'span': slice(0, 107, None), numbering: (' ', 1', ' ')}}
     """
     input = [
-        (chain, str(seq.seq)) 
-        for chain, seq in sequences.items()
+        (chain, str(seq_record.seq)) 
+        for chain, seq_record in sequences.items()
     ]
     
     numbering, details, _ = anarci(input, scheme = scheme)
@@ -82,6 +82,9 @@ def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -
         for num, det in zip(numbering, details)
     })
 
+def contains_single_model(structure: Structure) -> bool:
+    return len(structure.get_list()) == 1
+
 def renumber_structure(structure: Structure, numbering: Dict) -> None:
     """Takes a numbering dictionary and a structure and updates the residue IDs with the new numbering 
 
@@ -89,6 +92,7 @@ def renumber_structure(structure: Structure, numbering: Dict) -> None:
         structure (Structure): 
         numbering (Dict):
     """
+    assert contains_single_model(structure), 'Structure contains more than one model'
     for name, numbering in numbering.items():
         res_ids = [res.id for res in structure[0][name].get_residues()][numbering.span]
         
@@ -124,8 +128,8 @@ def write_pdb(path: str, structure: Structure) -> None:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Renumber the Fv portion of a pdb file')
-    parser.add_argument('infile')
-    parser.add_argument('outfile')
+    parser.add_argument('infile', type=str, help='Input file')
+    parser.add_argument('outfile', type=str, help='Output file')
     args = parser.parse_args(argv)
     structure = get_structure(pathlib.Path(args.infile))
     sequences = get_structure_sequences(structure)
