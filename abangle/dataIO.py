@@ -148,14 +148,12 @@ def load(
     else:
         return dataout
 
-
 def convert(x):
     try:
         x = float(x)
     except ValueError:
         pass
     return x
-
 
 def print_table(table, out):
     """Format the table (list of lists) and print to file object out"""
@@ -168,7 +166,6 @@ def print_table(table, out):
             col = format_data(row[i]).rjust(col_paddings[i] + 1)
             print(col, end=' ', file=out)
         print(file=out)
-
 
 def format_data(dat):
     if type(dat) is float:
