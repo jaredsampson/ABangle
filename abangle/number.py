@@ -123,22 +123,71 @@ def renumber_structure(structure: Structure, numbering: Dict) -> None:
         structure[0][name].id = numbering.chain
 
 class FvSelect(Select):
-    """Sublassess Select so that only residues in the Fv will be written to disk
-
-    Args:
-        Select ([type]): [description]
+    """Sublassess select so that only residues in the Fv will be written to disk
     """
+    H = range(150)
+    L = range(150)
+
     def accept_residue(self, residue):
         
         hetcode, seqid, icode = residue.id
         chain = residue.parent.id
         
-        if chain == 'H' and seqid in range(113):
+        if chain == 'H' and seqid in self.H:
             return True
-        elif chain == 'L' and seqid in range(107):
+        elif chain == 'L' and seqid in self.L:
             return True
         else:
             return False
+
+class ChothiaSelect(FvSelect):
+    """Sublassess select so that only residues in the Chothia numbered Fv will be written to disk
+    """
+    H = range(113)
+    L = range(107)
+
+class CoresetSelect(FvSelect):
+    """Subclasses select so that only residues in the Fv coreset will be written to disk 
+    """
+    H = [
+        11, 12, 17, 19, 20, 21, 22, 
+        23, 24, 25, 35, 36, 37, 38, 
+        39, 45, 46, 47, 68, 69, 70, 
+        71, 72, 83, 84, 85, 86, 87, 
+        88, 89, 90, 91, 92, 93, 94
+    ]
+    L = [
+        14, 15, 16, 17, 18, 19, 20, 
+        21, 22, 23, 35, 36, 37, 38, 
+        44, 45, 46, 47, 48, 49, 69, 
+        70, 71, 72, 73, 74, 75, 79, 
+        80, 81, 82, 85, 86, 87, 88
+    ]
+
+class HCoresetSelect(FvSelect):
+    """Subclasses select so that only residues in the Fv coreset will be written to disk 
+    """
+    H = [
+        11, 12, 17, 19, 20, 21, 22, 
+        23, 24, 25, 35, 36, 37, 38, 
+        39, 45, 46, 47, 68, 69, 70, 
+        71, 72, 83, 84, 85, 86, 87, 
+        88, 89, 90, 91, 92, 93, 94
+    ]
+    L = []
+
+class LCoresetSelect(FvSelect):
+    """Subclasses select so that only residues in the Fv coreset will be written to disk 
+    """
+    H = []
+    L = [
+        14, 15, 16, 17, 18, 19, 20, 
+        21, 22, 23, 35, 36, 37, 38, 
+        44, 45, 46, 47, 48, 49, 69, 
+        70, 71, 72, 73, 74, 75, 79, 
+        80, 81, 82, 85, 86, 87, 88
+    ]
+
 
 def write_pdb(path: str, structure: Structure) -> None:
     """Writes the Fv portion of a pdb to disk
