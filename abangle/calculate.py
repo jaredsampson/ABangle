@@ -20,6 +20,8 @@ AUTHOR
 	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)\n
 """
 import subprocess
+from Bio.PDB.PDBIO import PDBIO
+from Bio.PDB.Structure import Structure
 import numpy
 import math
 import sys
@@ -38,48 +40,35 @@ from dataclasses import dataclass
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
 
-# Read in known sequences
-Sequences, Residues = dataIO.load(
-    os.path.join(data_path, "Sequences.dat"), header=True, rownames=0, conv=False
-)
-
 #########################
 # Calculation functions #
 #########################
 
-def create_coreset(fname):
-    """Parses the file so that it only contains the coreset residues in each domain"""
-    try:
-        # Parse the input file
-        Hfd, Hf = tempfile.mkstemp(".pdb", "H")
-        Lfd, Lf = tempfile.mkstemp(".pdb", "L")
-
-        Htmp = os.fdopen(Hfd, "w")
-        Ltmp = os.fdopen(Lfd, "w")
-        fin = open(fname, "r").readlines()
-        for line in fin:
-            l = line.split()
-            if not "ATOM" in line:
-                continue
-            elif l[4] == "L" and l[5] in coreset['light']:
-                Ltmp.write(line)
-            elif l[4] == "H" and l[5] in coreset['heavy']:
-                Htmp.write(line)  
-        Htmp.close()
-        Ltmp.close()
-    except Exception as exe:
-        os.remove(Hf)
-        os.remove(Lf)
-        raise Exception(str(exe) + "\n")
+def create_coresets(path):
+    # create paths
+    name = path.stem[:4]
+    Houtpath = str((path.parent/f'{path.stem}_Hcoreset').with_suffix('.pdb'))
+    Loutpath = str((path.parent/f'{path.stem}_Lcoreset').with_suffix('.pdb'))
     
-    return Hf, Lf
+    # read in structure
+    parser = PDBParser()
+    structure = parser.get_structure(name, path)
+    
+    # save H and L coresets to separate files
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(Houtpath, select = num.HCoresetSelect())
+    io.save(Loutpath, select = num.LCoresetSelect())
+
+    # return the filehandles
+    return Houtpath, Loutpath
 
 def mapvectors(fname, PAPS_def=False):
     """Maps the reference frames (planes) onto to VH and VL domains of an Fv structure (fname is chothia numbered pdb file
     with VH as H chain and VL as L chain. PAPS_def means use the same definition of C that Abhinandan  and Martin did when calculating
     their torsion angle (makes HL should be the same as their packing angle as defined in authors' paper)"""
     # Get transformation matrices by aligning the core of the domains
-    Hf, Lf = create_coreset(fname)
+    Hf, Lf = create_coresets(fname)
     
     uL = align(os.path.join(data_path, "consensus_L.pdb"), Lf)
     uH = align(os.path.join(data_path, "consensus_H.pdb"), Hf)
@@ -113,7 +102,6 @@ def mapvectors(fname, PAPS_def=False):
     Hpoints = list([transform(x, uH) for x in (cH, H1, H2)])
 
     return Lpoints, Hpoints
-
 
 def align(file1, file2):
     """Aligns file1 to file2 using tmalign and returns the transformation matrix"""
