@@ -2,9 +2,7 @@ import pathlib
 import argparse
 from typing import *
 from anarci import anarci
-from fastcore.basics import Str
 from fastcore.xtras import dict2obj
-
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO, Select
 from Bio.PDB.Entity import Entity
@@ -78,13 +76,13 @@ def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -
     numbering, details, _ = anarci(input, scheme = scheme)
     
     numbering = [
-        [(' ', res_id[0][0], res_id[0][1]) for res_id in num[0][0]
-        if res_id[1] != '-']
+        [(' ', res_id[0][0], res_id[0][1]) for res_id in num[0][0] #(hetcode, seqid, icode)
+        if res_id[1] != '-'] # remove gapped elements 
         for num in numbering 
-        if num
+        if num # drop numbering where no Fv could be found 
     ]
     
-    details = dict2obj([det[0] for num, det in zip(numbering, details) if num]) # details wrapped in list
+    details = dict2obj([det[0] for num, det in zip(numbering, details) if num]) # extract details from list wrapper
 
     return dict2obj({
         det.query_name: 
