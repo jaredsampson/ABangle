@@ -22,7 +22,7 @@ AUTHOR
 import subprocess
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.Structure import Structure
-import numpy
+import numpy as np
 import math
 import sys
 import os
@@ -33,9 +33,10 @@ import pathlib
 from Bio.PDB.PDBParser import PDBParser
 from abangle import dataIO
 from abangle import number as num
-from abangle.constants import coreset, centroids, aa_code_dict
+from abangle.constants import coresets, principle_components, aa_code_dict
 from typing import List
 from dataclasses import dataclass
+from collections import namedtuple
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
@@ -43,6 +44,28 @@ data_path = path.parent/'data'
 #########################
 # Calculation functions #
 #########################
+
+# First principal component runs approximately parallel to strands in the β-sheet interface, 
+# Second principal component runs approximately perpendicular, 
+# Third principal component represents the normal to plane formed by components 1 and 2
+
+# Principal components computed on heavy chain consensus structure
+pcH = np.array(
+    [
+        [0.9525187, -0.1371821, 0.2718256], 
+        [-0.117058, 0.659152, 0.7428432], 
+        [-2.691829, -3.847092, 1.196887]
+    ]
+)
+
+# Principal components computed on light chain consensus structure
+pcL = np.array(
+    [
+        [-0.6193343, 0.639472, 0.4555223], 
+        [0.5267385, 0.7686645, -0.362907], 
+        [-3.702842, -0.6288583, -5.314558]
+    ]
+)
 
 def create_coresets(path):
     # create paths
@@ -63,7 +86,7 @@ def create_coresets(path):
     # return the filehandles
     return Houtpath, Loutpath
 
-def mapvectors(fname, PAPS_def=False):
+def map_vectors(fname, PAPS_def=False):
     """Maps the reference frames (planes) onto to VH and VL domains of an Fv structure (fname is chothia numbered pdb file
     with VH as H chain and VL as L chain. PAPS_def means use the same definition of C that Abhinandan  and Martin did when calculating
     their torsion angle (makes HL should be the same as their packing angle as defined in authors' paper)"""
@@ -74,32 +97,27 @@ def mapvectors(fname, PAPS_def=False):
     uH = align(os.path.join(data_path, "consensus_H.pdb"), Hf)
     os.remove(Hf)
     os.remove(Lf)
-
-    if PAPS_def:
-        # The centroids of interface residues.
-        cH = centroids['heavy'][2]
-        cL = centroids['light'][2]
-    else:
-        # The minimally varying centroid vector is at. As calculated.:
-        cH = [
-            -10 * 0.5 * centroids['heavy'][0][i] + 1 * 0.5 * centroids['heavy'][1][i] + centroids['heavy'][2][i] for i in range(3)
-        ]
-        cL = [
-            6 * 0.5 * centroids['light'][0][i] - 2 * 0.5 * centroids['light'][1][i] + centroids['light'][2][i] for i in range(3)
-        ]
+    
+    # coefs to map centroids onto plane formed by PC1 and PC2 
+    heavy_centroid_coefs = np.array([-5, 0.5, 1])
+    light_centroid_coefs = np.array([3, -1, 1])
+    
+    # calculate the minimally varying centroid vector
+    heavy_centroid_coords = heavy_centroid_coefs.dot(pcH)
+    light_centroid_coords = light_centroid_coefs.dot(pcL)
 
     # Define the plane vectors from the centroid point
     # On VL domain
-    L1 = [cL[i] + centroids['light'][0][i] for i in range(3)]
-    L2 = [cL[i] + centroids['light'][1][i] for i in range(3)]
+    L1 = light_centroid_coords + pcL[0]
+    L2 = light_centroid_coords + pcL[1]
 
     # On VH domain
-    H1 = [cH[i] + centroids['heavy'][0][i] for i in range(3)]
-    H2 = [cH[i] + centroids['heavy'][1][i] for i in range(3)]
+    H1 = heavy_centroid_coords + pcH[0]
+    H2 = heavy_centroid_coords + pcH[1]
 
     # Do the transfomation onto the
-    Lpoints = list([transform(x, uL) for x in (cL, L1, L2)])
-    Hpoints = list([transform(x, uH) for x in (cH, H1, H2)])
+    Lpoints = list([transform(x, uL) for x in (light_centroid_coords, L1, L2)])
+    Hpoints = list([transform(x, uH) for x in (heavy_centroid_coords, H1, H2)])
 
     return Lpoints, Hpoints
 
@@ -184,7 +202,7 @@ def angles(fname):
     """Calculate the orientation measures for the structure in fname"""
     # Map the vectors on the Heavy and Light domains of the structure
     
-    Lpoints, Hpoints = mapvectors(fname)
+    Lpoints, Hpoints = map_vectors(fname)
 
     # Create vectors with which to calculate angles between.
     C = normalise([Hpoints[0][i] - Lpoints[0][i] for i in range(3)])
@@ -199,34 +217,34 @@ def angles(fname):
     )
 
     # Projection of the L1 and H1 vectors onto the plane perpendicular to the centroid vector.
-    n_x = numpy.cross(L1, C)
-    n_y = numpy.cross(C, n_x)
+    n_x = np.cross(L1, C)
+    n_y = np.cross(C, n_x)
 
-    tmpL_ = normalise([0, numpy.dot(L1, n_x), numpy.dot(L1, n_y)])
-    tmpH_ = normalise([0, numpy.dot(H1, n_x), numpy.dot(H1, n_y)])
+    tmpL_ = normalise([0, np.dot(L1, n_x), np.dot(L1, n_y)])
+    tmpH_ = normalise([0, np.dot(H1, n_x), np.dot(H1, n_y)])
 
     # HL is the angle between the L1 and H1 vectors looking down the C vector (the centroid vector)
-    HL = math.acos(numpy.dot(tmpL_, tmpH_))
+    HL = math.acos(np.dot(tmpL_, tmpH_))
     HL = HL * (180.0 / math.pi)
 
     # Find direction by computing cross products
-    if numpy.dot(numpy.cross(tmpL_, tmpH_), [1, 0, 0]) < 0:
+    if np.dot(np.cross(tmpL_, tmpH_), [1, 0, 0]) < 0:
         HL = -HL
 
     # LC1 angle is the angle between the L1 and C vectors
-    LC1 = math.acos(numpy.dot(L1, C))
+    LC1 = math.acos(np.dot(L1, C))
     LC1 = LC1 * (180.0 / math.pi)
 
     # HC1 angle is the angle between the H1 and C vectors
-    HC1 = math.acos(numpy.dot(H1, Cminus))
+    HC1 = math.acos(np.dot(H1, Cminus))
     HC1 = HC1 * (180.0 / math.pi)
 
     # LC2 angle is the angle between the L2 and C vectors
-    LC2 = math.acos(numpy.dot(L2, C))
+    LC2 = math.acos(np.dot(L2, C))
     LC2 = LC2 * (180.0 / math.pi)
 
     # HC2 angle is the angle between the H2 and C vectors
-    HC2 = math.acos(numpy.dot(H2, Cminus))
+    HC2 = math.acos(np.dot(H2, Cminus))
     HC2 = HC2 * (180.0 / math.pi)
 
     # Return the angles and the separation distance.
