@@ -29,26 +29,3 @@ principle_components = {
         [-3.702842, -0.6288583, -5.314558]
     ]
 }
-
-aa_code_dict = {
-    'ARG': 'R',
-    'HIS': 'H',
-    'LYS': 'K',
-    'ASP': 'D',
-    'GLU': 'E',
-    'SER': 'S', 
-    'THR': 'T',
-    'ASN': 'N',
-    'GLN': 'Q',
-    'CYS': 'C',
-    'GLY': 'G',
-    'PRO': 'P',
-    'ALA': 'A',
-    'VAL': 'V',
-    'ILE': 'I',
-    'LEU': 'L',
-    'MET': 'M',
-    'PHE': 'F',
-    'TYR': 'Y',
-    'TRP': 'W'
-}

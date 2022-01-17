@@ -19,31 +19,17 @@ AUTHOR
 	Prof C.Deane - Oxford protein informatics group.
 	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)\n
 """
-import subprocess
-from Bio.PDB.PDBIO import PDBIO
-from Bio.PDB.Structure import Structure
+from collections import namedtuple
+from Bio.PDB.Superimposer import Superimposer
 import numpy as np
 import math
-import sys
-import os
-import tempfile
-import urllib.request, urllib.parse, urllib.error
-import itertools
 import pathlib
 from Bio.PDB.PDBParser import PDBParser
-from abangle import dataIO
-from abangle import number as num
-from abangle.constants import coresets, principle_components, aa_code_dict
+from abangle.constants import coresets
 from typing import List
-from dataclasses import dataclass
-from collections import namedtuple
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
-
-#########################
-# Calculation functions #
-#########################
 
 # First principal component runs approximately parallel to strands in the β-sheet interface, 
 # Second principal component runs approximately perpendicular, 
@@ -67,219 +53,118 @@ pcL = np.array(
     ]
 )
 
-def create_coresets(path):
-    # create paths
-    name = path.stem[:4]
-    Houtpath = str((path.parent/f'{path.stem}_Hcoreset').with_suffix('.pdb'))
-    Loutpath = str((path.parent/f'{path.stem}_Lcoreset').with_suffix('.pdb'))
+def get_coreset_atoms(structure, chain, coresets):
     
-    # read in structure
-    parser = PDBParser()
-    structure = parser.get_structure(name, path)
+    coreset_atoms = [
+        atom
+        for atom in structure.get_atoms()
+        if atom.get_name() == 'CA'
+        if atom.parent.id[1] in coresets[chain]
+        if atom.parent.parent.id == chain
+    ]
     
-    # save H and L coresets to separate files
-    io = PDBIO()
-    io.set_structure(structure)
-    io.save(Houtpath, select = num.HCoresetSelect())
-    io.save(Loutpath, select = num.LCoresetSelect())
+    return coreset_atoms
 
-    # return the filehandles
-    return Houtpath, Loutpath
+def align(coresets, structure, chain, consensus):
+    
+    coreset_atoms = get_coreset_atoms(structure, chain, coresets)
+    consensus_atoms = list(consensus.get_atoms())
 
-def map_vectors(fname, PAPS_def=False):
+    si = Superimposer()
+    si.set_atoms(coreset_atoms, consensus_atoms)
+    rot, tran = si.rotran
+    return rot, tran
+
+def transform(vector, rot, tran): return vector.dot(rot) + tran
+
+Points = namedtuple('Points', ['C', 'V1', 'V2']) 
+
+def map_vectors(fname, chain, pcs, PAPS_def=False):
     """Maps the reference frames (planes) onto to VH and VL domains of an Fv structure (fname is chothia numbered pdb file
     with VH as H chain and VL as L chain. PAPS_def means use the same definition of C that Abhinandan  and Martin did when calculating
     their torsion angle (makes HL should be the same as their packing angle as defined in authors' paper)"""
-    # Get transformation matrices by aligning the core of the domains
-    Hf, Lf = create_coresets(fname)
-    
-    uL = align(os.path.join(data_path, "consensus_L.pdb"), Lf)
-    uH = align(os.path.join(data_path, "consensus_H.pdb"), Hf)
-    os.remove(Hf)
-    os.remove(Lf)
     
     # coefs to map centroids onto plane formed by PC1 and PC2 
-    heavy_centroid_coefs = np.array([-5, 0.5, 1])
-    light_centroid_coefs = np.array([3, -1, 1])
+    coefs = np.array([-5, 0.5, 1]) if chain == 'H' else np.array([3, -1, 1])
     
     # calculate the minimally varying centroid vector
-    heavy_centroid_coords = heavy_centroid_coefs.dot(pcH)
-    light_centroid_coords = light_centroid_coefs.dot(pcL)
+    C = coefs.dot(pcs)
 
     # Define the plane vectors from the centroid point
-    # On VL domain
-    L1 = light_centroid_coords + pcL[0]
-    L2 = light_centroid_coords + pcL[1]
+    V1 = C + pcs[0]
+    V2 = C + pcs[1]
 
-    # On VH domain
-    H1 = heavy_centroid_coords + pcH[0]
-    H2 = heavy_centroid_coords + pcH[1]
+    parser = PDBParser(PERMISSIVE=True, QUIET=True)
+    structure = parser.get_structure(fname.stem, fname)
+    consensus = parser.get_structure(chain, data_path/f'consensus_{chain}.pdb')
+
+    # Get transformation matrices by aligning the core of the domains
+    rot, tran = align(coresets, structure, chain, consensus)
 
     # Do the transfomation onto the
-    Lpoints = list([transform(x, uL) for x in (light_centroid_coords, L1, L2)])
-    Hpoints = list([transform(x, uH) for x in (heavy_centroid_coords, H1, H2)])
+    points = [transform(v, rot, tran) for v in (C, V1, V2)]
 
-    return Lpoints, Hpoints
+    return Points(*points)
 
-def align(file1, file2):
-    """Aligns file1 to file2 using tmalign and returns the transformation matrix"""
-    # Temp file for the matrix for latest versions of TMalign
-    mtmpfd, mtmp = tempfile.mkstemp(".txt", "matrix")
-    os.close(mtmpfd)
-    # Align file1 to file2 using TMalign
+def get_unit_vector(vec): return vec / np.linalg.norm(vec)
 
-    try:
-        subpr = subprocess.Popen(
-            ["TMalign", file1, file2, "-m", mtmp],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        TMresult = subpr.communicate()
-    except OSError:
-        # If is not found, point to webpage for installation.
-        raise Exception(
-            "Cannot execute TMalign. Please install and ensure it is in your path.\nTMalign can be downloaded from:\n"
-            "http://zhanglab.ccmb.med.umich.edu/TM-align/\n"
-            "Reference: Y. Zhang and J. Skolnick, Nucl. Acids Res. 2005 33, 2302-9\n"
-        )
+def compute_angle(vec1, vec2): return np.arccos(np.dot(vec1, vec2))
 
-    # Parse the output of TMalign. Some versions don't output the matrix. -m option is needed. Does not affect versions which don't need it.
-    
-    result = TMresult[0].decode('utf-8').split("\n")
-    attempt = 0
-    while 1:
-        try:
-            i = 0
-            while 1:
-                if result[i].upper().startswith(" -------- ROTATION MATRIX"):
-                    # Grab transformation matrix
-                    u = []
-                    u.append(list(map(float, result[i + 2].split()[1:])))
-                    u.append(list(map(float, result[i + 3].split()[1:])))
-                    u.append(list(map(float, result[i + 4].split()[1:])))
-                    break
-                else:
-                    i += 1
-            break
-        except IndexError:
-            try:
-                if not attempt:
-                    ftmp = open(mtmp)
-                    result = ftmp.readlines()
-                    ftmp.close()
-                    attempt = 1
-            except IOError:
-                break
-
-    if os.path.exists(mtmp):
-        os.remove(mtmp)
-
-    # Return the transformation matrix
-    try:
-        return u
-    except NameError:
-        raise Exception(
-            "TMalign alignment file not in an expected format, check output gives rotation matrix (or with -m option )\n"
-        )
-
-def transform(coords, u):
-    """Transforms coords by a matrix u. u is found using tmalign"""
-    # Ensure coordinates are of type float
-    coords = list(map(float, coords))
-    # Do transformation
-    X = u[0][0] + u[0][1] * coords[0] + u[0][2] * coords[1] + u[0][3] * coords[2]
-    Y = u[1][0] + u[1][1] * coords[0] + u[1][2] * coords[1] + u[1][3] * coords[2]
-    Z = u[2][0] + u[2][1] * coords[0] + u[2][2] * coords[1] + u[2][3] * coords[2]
-
-    # Return transformed coordinates
-    return [X, Y, Z]
-
-def normalise(vec):
-    mag = (sum(list([x ** 2 for x in vec]))) ** 0.5
-    return list([x / mag for x in vec])
-
-def angles(fname):
+def find_angles(fname):
     """Calculate the orientation measures for the structure in fname"""
     # Map the vectors on the Heavy and Light domains of the structure
     
-    Lpoints, Hpoints = map_vectors(fname)
+    Lpoints, Hpoints = [
+        map_vectors(fname, chain, pcs) 
+        for chain, pcs in zip(['L', 'H'], [pcL, pcH])
+    ]
 
-    # Create vectors with which to calculate angles between.
-    C = normalise([Hpoints[0][i] - Lpoints[0][i] for i in range(3)])
-    Cminus = list([-1 * x for x in C])
-    L1 = normalise([Lpoints[1][i] - Lpoints[0][i] for i in range(3)])
-    L2 = normalise([Lpoints[2][i] - Lpoints[0][i] for i in range(3)])
-    H1 = normalise([Hpoints[1][i] - Hpoints[0][i] for i in range(3)])
-    H2 = normalise([Hpoints[2][i] - Hpoints[0][i] for i in range(3)])
-    dc = (
-        sum([x ** 2 for x in [Hpoints[0][i] - Lpoints[0][i] for i in range(3)]])
-        ** 0.5
-    )
+    C = get_unit_vector(Hpoints.C - Lpoints.C)
+    L1 = get_unit_vector(Lpoints.V1 - Lpoints.C)
+    L2 = get_unit_vector(Lpoints.V2 - Lpoints.C)
+    H1 = get_unit_vector(Hpoints.V1 - Hpoints.C)
+    H2 = get_unit_vector(Hpoints.V2 - Hpoints.C)
+
+    dc = np.linalg.norm(Hpoints.C - Lpoints.C)
 
     # Projection of the L1 and H1 vectors onto the plane perpendicular to the centroid vector.
     n_x = np.cross(L1, C)
     n_y = np.cross(C, n_x)
 
-    tmpL_ = normalise([0, np.dot(L1, n_x), np.dot(L1, n_y)])
-    tmpH_ = normalise([0, np.dot(H1, n_x), np.dot(H1, n_y)])
+    tmpL_ = get_unit_vector([0, np.dot(L1, n_x), np.dot(L1, n_y)])
+    tmpH_ = get_unit_vector([0, np.dot(H1, n_x), np.dot(H1, n_y)])
 
+    radian = 180.0 / math.pi
+    
     # HL is the angle between the L1 and H1 vectors looking down the C vector (the centroid vector)
-    HL = math.acos(np.dot(tmpL_, tmpH_))
-    HL = HL * (180.0 / math.pi)
+    HL = compute_angle(tmpL_, tmpH_) * radian
 
     # Find direction by computing cross products
     if np.dot(np.cross(tmpL_, tmpH_), [1, 0, 0]) < 0:
         HL = -HL
-
-    # LC1 angle is the angle between the L1 and C vectors
-    LC1 = math.acos(np.dot(L1, C))
-    LC1 = LC1 * (180.0 / math.pi)
-
-    # HC1 angle is the angle between the H1 and C vectors
-    HC1 = math.acos(np.dot(H1, Cminus))
-    HC1 = HC1 * (180.0 / math.pi)
-
-    # LC2 angle is the angle between the L2 and C vectors
-    LC2 = math.acos(np.dot(L2, C))
-    LC2 = LC2 * (180.0 / math.pi)
-
-    # HC2 angle is the angle between the H2 and C vectors
-    HC2 = math.acos(np.dot(H2, Cminus))
-    HC2 = HC2 * (180.0 / math.pi)
+ 
+    LC1, HC1, LC2, HC2 = [
+        compute_angle(vec1, vec2) * radian 
+        for vec1, vec2 in zip(
+            [L1, H1, L2, H2], 
+            [C, -C, C, -C]
+        )
+    ]
 
     # Return the angles and the separation distance.
-    return dict(
-        list(zip(["HL", "HC1", "LC1", "HC2", "LC2", "dc"], [HL, HC1, LC1, HC2, LC2, dc]))
-    )
-
-def get_loop_length(seq, loop):
-    
-    if loop == 'L1':
-        residues = ["L24", "L25", "L26", "L27", "L28", "L29", "L30", "L31", "L32", "L33", "L34"]
-    elif loop == 'H3':
-        residues = ["H95", "H96", "H97", "H98", "H99", "H100", "H101", "H102"]
-    else:
-        raise ValueError('Loop not recognized')
-    
-    n = 0
-    for res, aa in seq.items():
-        if aa != "-":
-            if res[-1].isdigit():
-                if res in residues:
-                    n += 1
-            elif res[-1].isalpha():
-                if res[:-1] in residues:
-                    n += 1
-            else:
-                continue
-    
-    return n
+    return {
+        name: angle
+        for name, angle in zip(
+            ["HL", "HC1", "LC1", "HC2", "LC2", "dc"], 
+            [HL, HC1, LC1, HC2, LC2, dc]
+        )
+    }
 
 def validate_angles(file, HC2, HC1, LC2, LC1, dc, HL, rel_tol=1e-2):
     name = file[:4]
     angle_keys = ['HC2', 'HC1', 'LC2', 'LC1', 'dc', 'HL']
     true_angles = [HC2, HC1, LC2, LC1, dc, HL]
-    new_angles = angles(examples/file)
+    new_angles = find_angles(examples/file)
     assert all([math.isclose(new_angles[key], angle, rel_tol=rel_tol) for key, angle in zip(angle_keys, true_angles)])
 
 if __name__ == '__main__':
