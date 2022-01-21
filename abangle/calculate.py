@@ -19,14 +19,16 @@ AUTHOR
 	Prof C.Deane - Oxford protein informatics group.
 	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)\n
 """
-from collections import namedtuple
 from Bio.PDB.Superimposer import Superimposer
+from Bio.PDB.PDBParser import PDBParser
+
 import numpy as np
 import math
 import pathlib
-from Bio.PDB.PDBParser import PDBParser
-from abangle.constants import coresets
 from typing import List
+from collections import namedtuple
+
+from abangle.coresets import coresets
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
