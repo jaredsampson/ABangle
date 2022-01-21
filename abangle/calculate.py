@@ -112,24 +112,24 @@ def map_vectors(fname, chain, pcs, PAPS_def=False):
 
     return Points(*points)
 
-def get_unit_vector(vec): return vec / np.linalg.norm(vec)
+def as_unit_vector(vec): return vec / np.linalg.norm(vec)
 
 def compute_angle(vec1, vec2): return np.arccos(np.dot(vec1, vec2))
 
 def find_angles(fname):
     """Calculate the orientation measures for the structure in fname"""
-    # Map the vectors on the Heavy and Light domains of the structure
+   # Map the vectors on the Heavy and Light domains of the structure
     
     Lpoints, Hpoints = [
         map_vectors(fname, chain, pcs) 
         for chain, pcs in zip(['L', 'H'], [pcL, pcH])
     ]
 
-    C = get_unit_vector(Hpoints.C - Lpoints.C)
-    L1 = get_unit_vector(Lpoints.V1 - Lpoints.C)
-    L2 = get_unit_vector(Lpoints.V2 - Lpoints.C)
-    H1 = get_unit_vector(Hpoints.V1 - Hpoints.C)
-    H2 = get_unit_vector(Hpoints.V2 - Hpoints.C)
+    C = as_unit_vector(Hpoints.C - Lpoints.C)
+    L1 = as_unit_vector(Lpoints.V1 - Lpoints.C)
+    L2 = as_unit_vector(Lpoints.V2 - Lpoints.C)
+    H1 = as_unit_vector(Hpoints.V1 - Hpoints.C)
+    H2 = as_unit_vector(Hpoints.V2 - Hpoints.C)
 
     dc = np.linalg.norm(Hpoints.C - Lpoints.C)
 
@@ -137,8 +137,8 @@ def find_angles(fname):
     n_x = np.cross(L1, C)
     n_y = np.cross(C, n_x)
 
-    tmpL_ = get_unit_vector([0, np.dot(L1, n_x), np.dot(L1, n_y)])
-    tmpH_ = get_unit_vector([0, np.dot(H1, n_x), np.dot(H1, n_y)])
+    tmpL_ = as_unit_vector([0, np.dot(L1, n_x), np.dot(L1, n_y)])
+    tmpH_ = as_unit_vector([0, np.dot(H1, n_x), np.dot(H1, n_y)])
 
     radian = 180.0 / math.pi
     
