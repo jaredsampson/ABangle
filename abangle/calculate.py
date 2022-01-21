@@ -17,7 +17,7 @@ AUTHOR
 		
 	Supervisors
 	Prof C.Deane - Oxford protein informatics group.
-	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)\n
+	Dr Angelika Fuchs (Roche) and Dr Jiye Shi (UCB Celltech)
 """
 from Bio.PDB.Superimposer import Superimposer
 from Bio.PDB.PDBParser import PDBParser
@@ -32,10 +32,6 @@ from abangle.coresets import coresets
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
-
-# First principal component runs approximately parallel to strands in the β-sheet interface, 
-# Second principal component runs approximately perpendicular, 
-# Third principal component represents the normal to plane formed by components 1 and 2
 
 # Principal components computed on heavy chain consensus structure
 pcH = np.array(
@@ -56,6 +52,8 @@ pcL = np.array(
 )
 
 def get_coreset_atoms(structure, chain, coresets):
+    """Retrieves a list of Atom objects corresponding to the CA carbon of
+    the coreset residues"""
     
     coreset_atoms = [
         atom
@@ -68,7 +66,9 @@ def get_coreset_atoms(structure, chain, coresets):
     return coreset_atoms
 
 def align(coresets, structure, chain, consensus):
-    
+    """Computes rotation and translation matrices that can be used to map 
+    vectors calculated on consensus structure onto query structure"""
+
     coreset_atoms = get_coreset_atoms(structure, chain, coresets)
     consensus_atoms = list(consensus.get_atoms())
 
@@ -77,8 +77,12 @@ def align(coresets, structure, chain, consensus):
     rot, tran = si.rotran
     return rot, tran
 
-def transform(vector, rot, tran): return vector.dot(rot) + tran
+def transform(vector, rot, tran): 
+    """Carries out transformation of vector"""
+    return vector.dot(rot) + tran
 
+# Object holds the vectors that sit on a single plame
+# allows access by name to help readability
 Points = namedtuple('Points', ['C', 'V1', 'V2']) 
 
 def map_vectors(fname, chain, pcs, PAPS_def=False):
