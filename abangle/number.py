@@ -68,12 +68,12 @@ def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -
     Returns:
         Dict[str, Dict[str, Any]]: e.g. {'A': {'Chain': 'H', 'span': slice(0, 107, None), numbering: (' ', 1', ' ', 'T)}}
     """
-    input = [
+    formatted_input = [
         (chain, str(seq_record.seq)) 
         for chain, seq_record in sequences.items()
     ]
     
-    numbering, details, _ = anarci(input, scheme = scheme)
+    numbering, details, _ = anarci(formatted_input, scheme = scheme)
     
     numbering = [
         [(' ', res_id[0][0], res_id[0][1]) for res_id in num[0][0] #(hetcode, seqid, icode)

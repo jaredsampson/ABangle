@@ -29,7 +29,7 @@ from typing import List
 from collections import namedtuple
 
 from abangle.coresets import coresets
-
+ 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
 
@@ -67,7 +67,7 @@ def get_coreset_atoms(structure, chain, coresets):
 
 def align(coresets, structure, chain, consensus):
     """Computes rotation and translation matrices that can be used to map 
-    vectors calculated on consensus structure onto query structure"""
+    vectors calculated on consensus structure onto query structure."""
 
     coreset_atoms = get_coreset_atoms(structure, chain, coresets)
     consensus_atoms = list(consensus.get_atoms())
@@ -78,18 +78,17 @@ def align(coresets, structure, chain, consensus):
     return rot, tran
 
 def transform(vector, rot, tran): 
-    """Carries out transformation of vector"""
+    """Performs transformation of vector position given rotation and 
+    transformation matrices."""
     return vector.dot(rot) + tran
 
 # Object holds the vectors that sit on a single plame
-# allows access by name to help readability
 Points = namedtuple('Points', ['C', 'V1', 'V2']) 
 
 def map_vectors(fname, chain, pcs, PAPS_def=False):
     """Maps the reference frames (planes) onto to VH and VL domains of an Fv structure (fname is chothia numbered pdb file
-    with VH as H chain and VL as L chain. PAPS_def means use the same definition of C that Abhinandan  and Martin did when calculating
-    their torsion angle (makes HL should be the same as their packing angle as defined in authors' paper)"""
-    
+    with VH as H chain and VL as L chain.
+    """
     # coefs to map centroids onto plane formed by PC1 and PC2 
     coefs = np.array([-5, 0.5, 1]) if chain == 'H' else np.array([3, -1, 1])
     
@@ -112,14 +111,18 @@ def map_vectors(fname, chain, pcs, PAPS_def=False):
 
     return Points(*points)
 
-def as_unit_vector(vec): return vec / np.linalg.norm(vec)
+def as_unit_vector(vec): 
+    """Divides a vector by its length to give a vector of length 1 
+    (unit vector)"""
+    return vec / np.linalg.norm(vec)
 
-def compute_angle(vec1, vec2): return np.arccos(np.dot(vec1, vec2))
+def compute_angle(vec1, vec2): 
+    """Computes angle between two vectors"""
+    return np.arccos(np.dot(vec1, vec2))
 
 def find_angles(fname):
     """Calculate the orientation measures for the structure in fname"""
-   # Map the vectors on the Heavy and Light domains of the structure
-    
+    # Map the vectors on the Heavy and Light domains of the structure
     Lpoints, Hpoints = [
         map_vectors(fname, chain, pcs) 
         for chain, pcs in zip(['L', 'H'], [pcL, pcH])
@@ -167,6 +170,7 @@ def find_angles(fname):
     }
 
 def validate_angles(file, HC2, HC1, LC2, LC1, dc, HL, rel_tol=1e-2):
+    """Checks that angles computed by find_angles function are correct"""
     name = file[:4]
     angle_keys = ['HC2', 'HC1', 'LC2', 'LC1', 'dc', 'HL']
     true_angles = [HC2, HC1, LC2, LC1, dc, HL]
