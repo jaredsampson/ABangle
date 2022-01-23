@@ -32,9 +32,9 @@ from collections import namedtuple
 
 from abangle.coresets import coresets
 from abangle.number import (
-        renumber_structure, 
         get_structure_sequences,
-        number_sequences
+        number_sequences,
+        renumber_structure
         )
 
  
@@ -88,7 +88,7 @@ def align(coresets, structure, chain, consensus):
 def transform(vector, rot, tran): 
     """Performs transformation of vector position given rotation and 
     transformation matrices."""
-    return vector.dot(rot) + tran
+    return vector @ rot + tran
 
 # Object holds the vectors that sit on a single plame
 Points = namedtuple('Points', ['C', 'V1', 'V2']) 
@@ -101,7 +101,7 @@ def map_vectors(fname, chain, pcs, PAPS_def=False):
     coefs = np.array([-5, 0.5, 1]) if chain == 'H' else np.array([3, -1, 1])
     
     # calculate the minimally varying centroid vector
-    C = coefs.dot(pcs)
+    C = coefs @ pcs
 
     # Define the plane vectors from the centroid point
     V1 = C + pcs[0]
@@ -130,7 +130,7 @@ def as_unit_vector(vec):
 
 def compute_angle(vec1, vec2): 
     """Computes angle between two vectors"""
-    return np.arccos(np.dot(vec1, vec2))
+    return np.arccos(vec1 @ vec2)
 
 def find_angles(fname):
     """Calculate the orientation measures for the structure in fname"""
@@ -152,8 +152,8 @@ def find_angles(fname):
     n_x = np.cross(L1, C)
     n_y = np.cross(C, n_x)
 
-    tmpL_ = as_unit_vector([0, np.dot(L1, n_x), np.dot(L1, n_y)])
-    tmpH_ = as_unit_vector([0, np.dot(H1, n_x), np.dot(H1, n_y)])
+    tmpL_ = as_unit_vector([0, L1 @ n_x, L1 @ n_y])
+    tmpH_ = as_unit_vector([0, H1 @ n_x, H1 @ n_y])
 
     radian = 180.0 / math.pi
     
@@ -161,7 +161,7 @@ def find_angles(fname):
     HL = compute_angle(tmpL_, tmpH_) * radian
 
     # Find direction by computing cross products
-    if np.dot(np.cross(tmpL_, tmpH_), [1, 0, 0]) < 0:
+    if np.cross(tmpL_, tmpH_) @ [1, 0, 0]) < 0:
         HL = -HL
  
     LC1, HC1, LC2, HC2 = [
