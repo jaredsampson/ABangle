@@ -2,11 +2,13 @@
 DESCRIPTION	
 	
 	abangle.calculate.py
-	A module to calculate the orientation between the VH and VL domains in an Antibody Fv regions.
+	A module to calculate the orientation between the VH and VL domains in 
+        an Antibody Fv regions.
 
 OUTPUT
 
-	~ Angles of the Fv regions in the files inputted from command line interface.
+	~ Angles of the Fv regions in the files inputted from command 
+        line interface.
 
 AUTHOR
 	
@@ -29,6 +31,12 @@ from typing import List
 from collections import namedtuple
 
 from abangle.coresets import coresets
+from abangle.number import (
+        renumber_structure, 
+        get_structure_sequences,
+        number_sequences
+        )
+
  
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
@@ -102,6 +110,10 @@ def map_vectors(fname, chain, pcs, PAPS_def=False):
     parser = PDBParser(PERMISSIVE=True, QUIET=True)
     structure = parser.get_structure(fname.stem, fname)
     consensus = parser.get_structure(chain, data_path/f'consensus_{chain}.pdb')
+
+    sequence = get_structure_sequences(structure)
+    numbering = number_sequences(sequence, scheme = 'chothia')
+    renumber_structure(structure, numbering)
 
     # Get transformation matrices by aligning the core of the domains
     rot, tran = align(coresets, structure, chain, consensus)
@@ -182,10 +194,10 @@ if __name__ == '__main__':
     examples = data_path.parent/'data'/'example_pdbs'
 
     angles_4KQ3 = {'HC2':114.97, 'HC1':71.58, 'LC2':83.15, 'LC1':119.49, 'dc':16.00, 'HL':-61.10}
-    validate_angles('4kq3_chothia_Fv.pdb', **angles_4KQ3)
+    validate_angles('4kq3.pdb', **angles_4KQ3)
 
     angles_2ATK = {'HL': -54.09, 'HC1': 70.76, 'HC2': 114.09, 'LC1': 123.29, 'LC2': 83.42, 'dc': 16.48}
-    validate_angles('2atk_chothia_Fv.pdb', **angles_2ATK)
+    validate_angles('2atk.pdb', **angles_2ATK)
 
     angles_1U8L = {'HL': -56.41, 'HC1': 68.73, 'HC2': 118.87, 'LC1': 123.11, 'LC2': 82.99, 'dc': 15.88}
-    validate_angles('1u8l_chothia_Fv.pdb', **angles_1U8L)
+    validate_angles('1u8l.pdb', **angles_1U8L)
