@@ -110,11 +110,13 @@ def renumber_structure(structure: Structure, numbering: Dict) -> None:
         res_ids = [res.id for res in structure[0][name].get_residues()]
         fv_res_ids = res_ids[numbering.span]
         non_fv_res_ids = set(res_ids) - set(fv_res_ids)
-        detach_children(structure[0][name], non_fv_res_ids) # kicks out residues that are not part of the Fv
+        # kicks out residues that are not part of the Fv
+        detach_children(structure[0][name], non_fv_res_ids) 
         old2new = list(zip(fv_res_ids, numbering.numbering))
 
         if new_numbering_ends_on_higher_reseqid(old2new):
-            old2new = reversed(old2new) # prevents residue id assignment clashing with existing residue id 
+            # prevents residue id assignment clashing with existing residue id 
+            old2new = reversed(old2new)         
         
         for old, new in old2new: 
             structure[0][name][old].id = new
@@ -140,36 +142,16 @@ class FvSelect(Select):
             return False
 
 class ChothiaSelect(FvSelect):
-    """Sublassess select so that only residues in the Chothia numbered Fv will be written to disk
+    """Sublassess select so that only residues in the Chothia numbered Fv 
+    will be written to disk
     """
     H = range(113)
     L = range(107)
 
-def write_pdb(path: str, structure: Structure) -> None:
+def write_pdb(path: str, structure: Structure, selector: Select) -> None:
     """Writes the Fv portion of a pdb to disk
     """
     io = PDBIO()
     io.set_structure(structure)
     io.save(path, select=FvSelect())
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description='Renumber the Fv portion of a pdb file')
-    parser.add_argument('infiles', nargs='+', type=str, help='Input file')
-    parser.add_argument('outdir', type=str, help='Output directory')
-    parser.add_argument('scheme', type=str, help='Numbering scheme')
-    args = parser.parse_args(argv)
-    outdir = pathlib.Path(args.outdir)
-
-    for pdb in args.infiles:
-        path = pathlib.Path(pdb)
-        structure = get_structure(path)
-        sequences = get_structure_sequences(structure)
-        numbering = number_sequences(sequences, scheme = args.scheme)
-        renumber_structure(structure, numbering)
-
-        outpath = (outdir/f'{path.stem}_{args.scheme}_Fv').with_suffix('.pdb')
-        write_pdb(str(outpath), structure)
-        
-if __name__ == '__main__':
-    exit(main())
-    

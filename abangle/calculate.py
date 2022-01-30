@@ -24,40 +24,29 @@ AUTHOR
 from Bio.PDB.Superimposer import Superimposer
 from Bio.PDB.PDBParser import PDBParser
 
+import json
 import numpy as np
 import math
 import pathlib
 from typing import List
 from collections import namedtuple
 
-from abangle.coresets import coresets
 from abangle.number import (
         get_structure_sequences,
         number_sequences,
         renumber_structure
         )
 
- 
 path = pathlib.Path(__file__).parent
 data_path = path.parent/'data'
 
-# Principal components computed on heavy chain consensus structure
-pcH = np.array(
-    [
-        [0.9525187, -0.1371821, 0.2718256], 
-        [-0.117058, 0.659152, 0.7428432], 
-        [-2.691829, -3.847092, 1.196887]
-    ]
-)
+# load in coreset residue number dictionary
+with open(data_path/'coresets.json') as f:
+    coresets = json.load(f)
 
-# Principal components computed on light chain consensus structure
-pcL = np.array(
-    [
-        [-0.6193343, 0.639472, 0.4555223], 
-        [0.5267385, 0.7686645, -0.362907], 
-        [-3.702842, -0.6288583, -5.314558]
-    ]
-)
+# Principal components computed on heavy chain consensus structure
+pcH = np.loadtxt(data_path/'principal_components_heavy.csv')
+pcL = np.loadtxt(data_path/'principal_components_light.csv')
 
 def get_coreset_atoms(structure, chain, coresets):
     """Retrieves a list of Atom objects corresponding to the CA carbon of
@@ -134,6 +123,10 @@ def compute_angle(vec1, vec2):
 
 def find_angles(fname):
     """Calculate the orientation measures for the structure in fname"""
+    
+    RADIAN = 180.0 / math.pi
+    
+    # HL is the angle between the L1 and H1 vectors looking down the C vector (the centroid vector)
     # Map the vectors on the Heavy and Light domains of the structure
     Lpoints, Hpoints = [
         map_vectors(fname, chain, pcs) 
@@ -152,20 +145,17 @@ def find_angles(fname):
     n_x = np.cross(L1, C)
     n_y = np.cross(C, n_x)
 
-    tmpL_ = as_unit_vector([0, L1 @ n_x, L1 @ n_y])
-    tmpH_ = as_unit_vector([0, H1 @ n_x, H1 @ n_y])
+    tmp_L = as_unit_vector([0, L1 @ n_x, L1 @ n_y])
+    tmp_H = as_unit_vector([0, H1 @ n_x, H1 @ n_y])
 
-    radian = 180.0 / math.pi
-    
-    # HL is the angle between the L1 and H1 vectors looking down the C vector (the centroid vector)
-    HL = compute_angle(tmpL_, tmpH_) * radian
+    HL = compute_angle(tmp_L, tmp_H) * RADIAN
 
     # Find direction by computing cross products
-    if np.cross(tmpL_, tmpH_) @ [1, 0, 0]) < 0:
+    if np.cross(tmp_L, tmp_H) @ [1, 0, 0] < 0:
         HL = -HL
  
     LC1, HC1, LC2, HC2 = [
-        compute_angle(vec1, vec2) * radian 
+        compute_angle(vec1, vec2) * RADIAN 
         for vec1, vec2 in zip(
             [L1, H1, L2, H2], 
             [C, -C, C, -C]
@@ -181,23 +171,3 @@ def find_angles(fname):
         )
     }
 
-def validate_angles(file, HC2, HC1, LC2, LC1, dc, HL, rel_tol=1e-2):
-    """Checks that angles computed by find_angles function are correct"""
-    name = file[:4]
-    angle_keys = ['HC2', 'HC1', 'LC2', 'LC1', 'dc', 'HL']
-    true_angles = [HC2, HC1, LC2, LC1, dc, HL]
-    new_angles = find_angles(examples/file)
-    assert all([math.isclose(new_angles[key], angle, rel_tol=rel_tol) for key, angle in zip(angle_keys, true_angles)])
-
-if __name__ == '__main__':
-    
-    examples = data_path.parent/'data'/'example_pdbs'
-
-    angles_4KQ3 = {'HC2':114.97, 'HC1':71.58, 'LC2':83.15, 'LC1':119.49, 'dc':16.00, 'HL':-61.10}
-    validate_angles('4kq3.pdb', **angles_4KQ3)
-
-    angles_2ATK = {'HL': -54.09, 'HC1': 70.76, 'HC2': 114.09, 'LC1': 123.29, 'LC2': 83.42, 'dc': 16.48}
-    validate_angles('2atk.pdb', **angles_2ATK)
-
-    angles_1U8L = {'HL': -56.41, 'HC1': 68.73, 'HC2': 118.87, 'LC1': 123.11, 'LC2': 82.99, 'dc': 15.88}
-    validate_angles('1u8l.pdb', **angles_1U8L)

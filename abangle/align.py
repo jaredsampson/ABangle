@@ -29,15 +29,15 @@ import subprocess, tempfile, os, re
 from pathlib import Path
 from abangle import calculate
 
-data_path = str(Path(__file__).parents[1]/'data')
-coresetL = [
-    int(l[1:])
-    for l in map(str.strip, open(os.path.join(data_path, "Lcoresetfw.txt")).readlines())
-]
-coresetH = [
-    int(l[1:])
-    for l in map(str.strip, open(os.path.join(data_path, "Hcoresetfw.txt")).readlines())
-]
+#data_path = str(Path(__file__).parents[1]/'data')
+#coresetL = [
+#    int(l[1:])
+#    for l in map(str.strip, open(os.path.join(data_path, "Lcoresetfw.txt")).readlines())
+#]
+#coresetH = [
+#    int(l[1:])
+#    for l in map(str.strip, open(os.path.join(data_path, "Hcoresetfw.txt")).readlines())
+#]
 
 
 def save_pdb_without_ter(filename, selection, **kwargs):
