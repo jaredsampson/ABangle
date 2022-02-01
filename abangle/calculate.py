@@ -96,6 +96,9 @@ def map_vectors(fname, chain, pcs, PAPS_def=False):
     V1 = C + pcs[0]
     V2 = C + pcs[1]
 
+    if not isinstance(fname, pathlib.Path):
+        fname = pathlib.Path(fname)
+
     parser = PDBParser(PERMISSIVE=True, QUIET=True)
     structure = parser.get_structure(fname.stem, fname)
     consensus = parser.get_structure(chain, data_path/f'consensus_{chain}.pdb')
