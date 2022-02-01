@@ -118,6 +118,8 @@ def main():
     angles = {path.stem: calculate.find_angles(path) for path in paths}
 
     OUTDIR = pathlib.Path(user_args.outdir)
+    if not OUTDIR.exists():
+        OUTDIR.mkdir(parents=True)
     NAME = pathlib.Path(user_args.name)
 
     if user_args.store == 'stdout':
