@@ -129,5 +129,5 @@ dmypy.json
 .pyre/
 
 # project specific 
-data/
+data/choth_fv
 nbs/
