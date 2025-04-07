@@ -76,19 +76,19 @@ def number_sequences(sequences: Dict[str, SeqRecord], scheme: str = 'chothia') -
     
     numbering, details, _ = anarci(formatted_input, scheme = scheme)
     
-    numbering = [
+    numbering_fv = [
         [(' ', res_id[0][0], res_id[0][1]) for res_id in num[0][0] #(hetcode, seqid, icode)
         if res_id[1] != '-'] # remove gapped elements 
         for num in numbering 
         if num # drop numbering where no Fv could be found 
     ]
     
-    details = dict2obj([det[0] for num, det in zip(numbering, details) if num]) # extract details from list wrapper
+    details_fv = dict2obj([det[0] for num, det in zip(numbering, details) if num]) # extract details from list wrapper
 
     return dict2obj({
         det.query_name: 
         {'chain': parse_chain_type(det),'span': slice(det.query_start, det.query_end), 'numbering': num}
-        for num, det in zip(numbering, details)
+        for num, det in zip(numbering_fv, details_fv)
     })
 
 def contains_single_model(structure: Structure) -> bool:
