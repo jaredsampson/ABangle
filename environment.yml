@@ -9,4 +9,5 @@ dependencies:
   - biopython
   - anarci
   - fastcore
+  - pip
   - pytest
