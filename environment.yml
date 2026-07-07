@@ -9,3 +9,4 @@ dependencies:
   - biopython
   - anarci
   - fastcore
+  - pytest
