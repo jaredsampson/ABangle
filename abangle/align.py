@@ -27,7 +27,7 @@ except ImportError:
     pass
 import subprocess, tempfile, os, re
 from pathlib import Path
-from abangle import calculate
+from . import calculate
 
 #data_path = str(Path(__file__).parents[1]/'data')
 #coresetL = [

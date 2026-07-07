@@ -6,7 +6,7 @@ import pathlib
 import pprint
 import sys
 
-from abangle import calculate
+from . import calculate
 
 description = """
 DESCRIPTION	

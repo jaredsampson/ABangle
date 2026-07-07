@@ -31,7 +31,7 @@ import pathlib
 from typing import List
 from collections import namedtuple
 
-from abangle.number import (
+from .number import (
         get_structure_sequences,
         number_sequences,
         renumber_structure
@@ -173,4 +173,3 @@ def find_angles(fname):
             [HL, HC1, LC1, HC2, LC2, dc]
         )
     }
-

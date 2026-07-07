@@ -37,7 +37,7 @@ import itertools
 # Import abangle modules #
 ##########################
 
-from abangle import align, dataIO
+from . import align, dataIO
 from functools import reduce
 
 ####################
