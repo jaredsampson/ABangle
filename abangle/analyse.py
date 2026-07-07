@@ -44,9 +44,17 @@ from functools import reduce
 # Global variables #
 ####################
 
-# Load the data files
+# Load the data files.
+# The repo keeps these alongside the source tree, while an installed package may
+# bundle them under the package directory.
 path = os.path.split(__file__)[0]
+repo_path = os.path.dirname(path)
 data_path = os.path.join(path, "data")
+if not os.path.isdir(data_path):
+    data_path = os.path.join(repo_path, "data")
+config_path = os.path.join(path, "config")
+if not os.path.isdir(config_path):
+    config_path = os.path.join(repo_path, "config")
 
 # This is the redundant set. Structures can be requested from it
 All_Angles, anglenames = dataIO.load(
@@ -76,7 +84,7 @@ Angles, anglenames = dataIO.load(
 # This is the user's angles and sequences. It is updated as the user adds more structures and stores them.
 try:
     user_datapath = (
-        open(os.path.join(path, "config/userdatapath.txt")).readline().strip()
+        open(os.path.join(config_path, "userdatapath.txt")).readline().strip()
     )
     User_Sequences, userResidues = dataIO.load(
         os.path.join(user_datapath, "UserSequences.dat"),
