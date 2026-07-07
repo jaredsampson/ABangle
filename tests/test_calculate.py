@@ -10,4 +10,9 @@ from abangle.number import *
  )])
 def test_find_angles(shared_datadir, fname, expected_angles):
     """Checks that angles computed by find_angles function are correct"""
-    return {key:round(val, 2) for key, val in find_angles(shared_datadir/fname).items()}
+    actual_angles = {
+        key: round(val, 2)
+        for key, val in find_angles(shared_datadir / fname).items()
+    }
+
+    assert actual_angles == expected_angles
