@@ -1,3 +1,11 @@
+Notice:
+
+This repository is a fork of the original ABangle code from the Deane lab.  The upstream project was developed by J. Dunbar, A. Fuchs, J. Shi, and C. M. Deane.
+
+Compared with the original version, this fork is an attempt to make ABangle easier to install and run on a modern machine.  The core calculations are unchanged, but updates have been made to the way the program is packaged (allowing `pip` install within a Conda environment).
+
+-------------------------------------------------------------------------------
+
 ABangle. A program to calculate and analyse the orientation between the VH and VL domains in 
 Antibodies. 
 
@@ -164,4 +172,3 @@ Functionality:
             ABangle -f Species Ltype -wp Mouse K, Mouse L, Human K, Human L -plot all
         show them in PyMOL:
             ABangle -f Species Ltype -wp Mouse K, Mouse L, Human K, Human L -pymol
-
