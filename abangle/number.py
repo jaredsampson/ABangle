@@ -97,6 +97,19 @@ def contains_single_model(structure: Structure) -> bool:
 def new_numbering_ends_on_higher_reseqid(old2new: Tuple) -> bool:
     return old2new[-1][0][1] < old2new[-1][1][1]
 
+def renumber_residues_safely(chain: Chain, old2new: List[Tuple]) -> None:
+    """Rename residues in two passes to avoid Biopython sibling-id warnings."""
+    tmp_ids = [
+        (old[0], 10000 + idx, old[2])
+        for idx, (old, _) in enumerate(old2new)
+    ]
+
+    for (old, _), tmp in zip(old2new, tmp_ids):
+        chain[old].id = tmp
+
+    for (_, new), tmp in zip(old2new, tmp_ids):
+        chain[tmp].id = new
+
 def renumber_structure(structure: Structure, numbering: Dict) -> None:
     """Takes a numbering dictionary and a structure and updates the residue IDs with the new numbering 
 
@@ -113,13 +126,7 @@ def renumber_structure(structure: Structure, numbering: Dict) -> None:
         # kicks out residues that are not part of the Fv
         detach_children(structure[0][name], non_fv_res_ids) 
         old2new = list(zip(fv_res_ids, numbering.numbering))
-
-        if new_numbering_ends_on_higher_reseqid(old2new):
-            # prevents residue id assignment clashing with existing residue id 
-            old2new = reversed(old2new)         
-        
-        for old, new in old2new: 
-            structure[0][name][old].id = new
+        renumber_residues_safely(structure[0][name], old2new)
         
         structure[0][name].id = numbering.chain
 
@@ -154,4 +161,3 @@ def write_pdb(path: str, structure: Structure, selector: Select) -> None:
     io = PDBIO()
     io.set_structure(structure)
     io.save(path, select=FvSelect())
-
